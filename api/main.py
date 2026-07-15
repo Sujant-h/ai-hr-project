@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 import llm_agents
 from agents.dispatch import analyze_cv, analyze_job_profile, backend_label
+from agents.rules import generate_email
 from api.demo_data import DEMO_CVS, DEMO_JOB
 from api.orchestration import analyze_candidates, audit_entry, batch_summary_entries, fallback_entries
 from api.schemas import (
@@ -189,3 +190,24 @@ def post_analysis(payload: AnalysisIn) -> AnalysisOut:
         ],
         audit=[audit_to_out(e) for e in entries],
     )
+
+
+class EmailIn(BaseModel):
+    candidate: CandidateOut
+    questions: list[str]
+
+
+class EmailOut(BaseModel):
+    to: str
+    subject: str
+    body: str
+
+
+@app.post("/api/email", response_model=EmailOut)
+def post_email(payload: EmailIn) -> EmailOut:
+    """⑤ Draft a follow-up email. Local only — this never reaches OpenAI.
+
+    The draft is never sent automatically; it is prepared for human review.
+    """
+    to, subject, body = generate_email(candidate_from_in(payload.candidate), payload.questions)
+    return EmailOut(to=to, subject=subject, body=body)
