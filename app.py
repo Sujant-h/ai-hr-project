@@ -8,11 +8,16 @@ all extraction and matching is done with transparent, rule-based demo logic.
 
 Architecture
 ------------
-The code is intentionally split into three layers:
+The code is split into layers, each in its own module:
 
-1. BACKEND / AGENT LOGIC      -> the `agents` section (pure functions + dataclasses)
-2. DATA STRUCTURES            -> dataclasses (Job, Requirement, Candidate, ...)
-3. UI / LAYOUT / CSS          -> the `ui` section (render_* functions)
+1. DATA STRUCTURES  -> models.py            (the contract both backends return)
+2. BACKEND          -> agents/rules.py      (deterministic agents, pure functions)
+                       llm_agents.py        (OpenAI backend, same contract)
+                       agents/dispatch.py   (LLM first, rules as fallback)
+3. UI / LAYOUT      -> this module          (render_* functions + Streamlit state)
+4. CSS              -> static/styles.css
+
+Only this module imports Streamlit: the agents stay pure and testable.
 
 Human-in-the-loop principle
 ---------------------------
@@ -24,472 +29,41 @@ judgement is always left to a human recruiter.
 from __future__ import annotations
 
 import base64
-import io
 import os
-import re
 import urllib.parse
-from collections import Counter
 from datetime import datetime
 from functools import lru_cache
 from html import escape  # imported as `escape`: render_spline_embed uses `html` as a local
+from pathlib import Path
 from typing import Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Optional PDF support — gracefully degrade if pypdf is unavailable.
-try:
-    from pypdf import PdfReader
-
-    HAS_PYPDF = True
-except Exception:  # pragma: no cover - environment dependent
-    HAS_PYPDF = False
-
-
-# =============================================================================
-#  DATA STRUCTURES  (shared contract — see models.py)
-# =============================================================================
-
-from models import (  # noqa: E402
-    EDU_LABELS,
-    EDU_LEVELS,
-    AuditEntry,
-    Candidate,
-    Gap,
-    MatchResult,
-    Requirement,
+# PDF reading lives entirely in llm_agents.pdf_to_markdown (pymupdf4llm, with a
+# pypdf fallback); see llm_agents.pdf_support_available() for the UI hint.
+import llm_agents
+from agents.dispatch import (
+    AgentRun,
+    analyze_cv,
+    analyze_job_profile,
+    backend_label,
+    match_candidate,
+    summarize_backends,
 )
-
-# LLM backend (OpenAI). If no OPENAI_API_KEY is set or the package is
-# missing, llm_agents.llm_available() is False and the app transparently
-# falls back to the deterministic rule-based agents below.
-import llm_agents  # noqa: E402
-
-
-# =============================================================================
-#  KNOWLEDGE BASE (deterministic demo extraction vocabulary)
-# =============================================================================
-
-SKILL_VOCAB = {
-    "Python": ["python"],
-    "Java": ["java"],
-    "JavaScript": ["javascript", "js", "node"],
-    "TypeScript": ["typescript", "ts"],
-    "React": ["react"],
-    "SQL": ["sql", "postgres", "mysql"],
-    "AWS": ["aws", "amazon web services"],
-    "Azure": ["azure"],
-    "Docker": ["docker"],
-    "Kubernetes": ["kubernetes", "k8s"],
-    "Machine Learning": ["machine learning", "ml", "tensorflow", "pytorch"],
-    "Excel": ["excel"],
-    "SAP": ["sap"],
-    "Salesforce": ["salesforce"],
-    "Projektmanagement": ["projektmanagement", "project management", "scrum", "agile", "kanban"],
-    "Kommunikation": ["kommunikation", "communication"],
-    "Vertrieb": ["vertrieb", "sales"],
-    "Marketing": ["marketing", "seo", "sea"],
-    "Buchhaltung": ["buchhaltung", "accounting", "rechnungswesen"],
-}
-
-LANGUAGE_VOCAB = {
-    "Deutsch": ["deutsch", "german"],
-    "Englisch": ["englisch", "english"],
-    "Französisch": ["französisch", "franzosisch", "french"],
-    "Spanisch": ["spanisch", "spanish"],
-    "Italienisch": ["italienisch", "italian"],
-}
-
-
-# =============================================================================
-#  BACKEND / AGENT LOGIC
-#  --------------------------------------------------------------------------
-#  Every agent is a pure function: it takes input data and returns structured
-#  output. None of them mutate global state or make hiring decisions.
-# =============================================================================
-
-
-@lru_cache(maxsize=None)
-def _word_pattern(term: str) -> re.Pattern:
-    """Case-insensitive whole-word matcher for `term`, compiled once."""
-    return re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
-
-
-# German writes compounds as one word — "Englischkenntnisse", "SQL-Erfahrung",
-# "Python-Entwickler" — so whole-word matching alone misses skills and languages
-# that a job ad plainly states. Matching bare prefixes instead would be worse:
-# "java" would then match "javascript". A synonym may therefore be followed by
-# one of these qualifier suffixes (optionally hyphenated) and nothing else.
-_COMPOUND_SUFFIXES = (
-    "kenntnisse", "kenntnissen", "kenntnis",
-    "erfahrung", "erfahrungen",
-    "entwickler", "entwicklerin", "entwicklung",
-    "experte", "expertin", "spezialist", "spezialistin",
-    "skills",
+from agents.rules import (
+    generate_email,
+    informationsluecken_agent,
+    rueckfragen_agent,
 )
+from models import AuditEntry
 
 
-@lru_cache(maxsize=None)
-def _vocab_pattern(term: str) -> re.Pattern:
-    """Whole-word matcher for `term` that also accepts German compound forms."""
-    suffixes = "|".join(_COMPOUND_SUFFIXES)
-    return re.compile(rf"\b{re.escape(term)}(?:-?(?:{suffixes}))?\b", re.IGNORECASE)
+def audit_fallback(agent: str, run: AgentRun) -> None:
+    """Record an LLM->rules fallback, if one happened, in the audit log."""
+    if run.fallback_reason:
+        audit(agent, "LLM-Fehler — Fallback auf Regeln", run.fallback_reason)
 
-
-def _find_terms_with_context(text: str, vocab: dict) -> list:
-    """Return (canonical_name, source_line) for each vocab entry found in `text`.
-
-    The source line is the line the synonym actually matched on. Callers need it
-    to judge context: looking the canonical name up again afterwards silently
-    misses every term that was found through a synonym.
-    """
-    found = []
-    lines = text.splitlines()
-    for canonical, synonyms in vocab.items():
-        match_line = next(
-            (
-                line
-                for syn in synonyms
-                for line in lines
-                if _vocab_pattern(syn).search(line)
-            ),
-            None,
-        )
-        if match_line is not None:
-            found.append((canonical, match_line))
-    return found
-
-
-def _find_terms(text: str, vocab: dict) -> list:
-    """Return the canonical names whose synonyms appear in `text`."""
-    return [canonical for canonical, _ in _find_terms_with_context(text, vocab)]
-
-
-def _detect_years(text: str) -> Optional[int]:
-    """Extract the largest stated number of years of experience."""
-    matches = re.findall(r"(\d{1,2})\s*\+?\s*(?:jahre|jahren|years?|j\.)", text.lower())
-    nums = [int(m) for m in matches if int(m) <= 50]
-    return max(nums) if nums else None
-
-
-# "Ausbildung" doubles as the standard German CV section header, so the bare
-# word on its own line says nothing about a completed qualification.
-_BARE_AUSBILDUNG_HEADER = re.compile(r"^\s*ausbildung\s*:?\s*$", re.IGNORECASE)
-
-
-def _mentions_education(text: str, key: str) -> bool:
-    """True when `key` appears as a stated qualification rather than a header."""
-    pattern = _word_pattern(key)
-    for line in text.splitlines():
-        if not pattern.search(line):
-            continue
-        if key == "ausbildung" and _BARE_AUSBILDUNG_HEADER.match(line):
-            continue
-        return True
-    return False
-
-
-def _detect_education(text: str) -> tuple:
-    """Return (level:int, label:str) for the highest education found.
-
-    Matching is whole-word: a plain substring test credits "Diplomarbeit" as a
-    Diplom and "Masterarbeit" as a Master, promoting candidates to degrees they
-    never claimed.
-    """
-    best = 0
-    for key, level in EDU_LEVELS.items():
-        if level <= best:  # cannot raise `best` — skip the scan
-            continue
-        if _mentions_education(text, key):
-            best = level
-    return best, EDU_LABELS.get(best, "unbekannt")
-
-
-def _detect_email(text: str) -> Optional[str]:
-    m = re.search(r"[\w.\-+]+@[\w.\-]+\.\w+", text)
-    return m.group(0) if m else None
-
-
-# --- Agent 1: Stellenprofil-Agent -------------------------------------------
-
-def stellenprofil_agent(text: str) -> list:
-    """Extract measurable requirements from a free-text job profile."""
-    requirements: list = []
-
-    def importance_for(snippet: str) -> str:
-        nice = ["wünschenswert", "wunschenswert", "von vorteil", "nice to have", "kann", "optional"]
-        low_snippet = snippet.lower()
-        return "kann" if any(n in low_snippet for n in nice) else "muss"
-
-    # Skills — importance is judged on the line the skill was actually matched
-    # on, which is not necessarily a line containing its canonical name.
-    for skill, source_line in _find_terms_with_context(text, SKILL_VOCAB):
-        requirements.append(
-            Requirement(
-                id=f"skill_{skill.lower().replace(' ', '_')}",
-                label=skill,
-                kind="skill",
-                value=skill,
-                importance=importance_for(source_line),
-            )
-        )
-
-    # Experience (years)
-    years = _detect_years(text)
-    if years:
-        requirements.append(
-            Requirement(
-                id="exp_years",
-                label=f"{years}+ Jahre Berufserfahrung",
-                kind="experience",
-                value=years,
-                importance="muss",
-            )
-        )
-
-    # Education
-    edu_level, edu_label = _detect_education(text)
-    if edu_level > 0:
-        requirements.append(
-            Requirement(
-                id="education",
-                label=f"Bildungsabschluss: {edu_label}",
-                kind="education",
-                value=edu_level,
-                importance="muss",
-            )
-        )
-
-    # Languages
-    for lang in _find_terms(text, LANGUAGE_VOCAB):
-        requirements.append(
-            Requirement(
-                id=f"lang_{lang.lower()}",
-                label=f"Sprache: {lang}",
-                kind="language",
-                value=lang,
-                importance="muss",
-            )
-        )
-
-    return requirements
-
-
-# --- Agent 2: CV-Agent ------------------------------------------------------
-
-def cv_agent(name: str, source: str, text: str, idx: int) -> Candidate:
-    """Extract structured candidate information from raw CV text."""
-    # Data minimization (Art. 5 GDPR / AGG): strip demographic lines BEFORE they
-    # are stored. `raw_text` is later reused as the CV for the matching call, so
-    # redacting here guarantees demographics never reach the API even when this
-    # rule-based fallback produced the candidate (defense in depth — the LLM path
-    # already redacts in cv_agent_llm).
-    text = llm_agents.redact_demographics(text)
-    skills = _find_terms(text, SKILL_VOCAB)
-    languages = _find_terms(text, LANGUAGE_VOCAB)
-    years = _detect_years(text)
-    edu_level, edu_label = _detect_education(text)
-    email = _detect_email(text)
-
-    # Try to find a human-readable name from a "Name:" line, else use given name.
-    display_name = name
-    m = re.search(r"name\s*[:\-]\s*(.+)", text, re.IGNORECASE)
-    if m:
-        candidate_line = m.group(1).strip().splitlines()[0]
-        if 2 < len(candidate_line) < 60:
-            display_name = candidate_line
-
-    return Candidate(
-        id=f"cand_{idx}",
-        name=display_name,
-        source=source,
-        raw_text=text,
-        skills=skills,
-        years=years,
-        education=edu_level,
-        education_label=edu_label if edu_level > 0 else "unbekannt",
-        languages=languages,
-        email=email,
-    )
-
-
-# --- Agent 3: Matching-Agent ------------------------------------------------
-
-def matching_agent(candidate: Candidate, requirements: list) -> list:
-    """Compare each requirement against the candidate's data (no ranking)."""
-    results: list = []
-    for req in requirements:
-        status = "offen"
-        note = ""
-
-        if req.kind == "skill":
-            if req.value in candidate.skills:
-                status, note = "erfuellt", "Im Lebenslauf erwähnt."
-            else:
-                status, note = "offen", "Nicht im Lebenslauf erwähnt."
-
-        elif req.kind == "experience":
-            if candidate.years is None:
-                status, note = "offen", "Keine Angabe zur Berufserfahrung gefunden."
-            elif candidate.years >= int(req.value):
-                status, note = "erfuellt", f"{candidate.years} Jahre angegeben."
-            else:
-                status, note = "teilweise", f"Nur {candidate.years} von {req.value} Jahren angegeben."
-
-        elif req.kind == "education":
-            if candidate.education == 0:
-                status, note = "offen", "Kein Bildungsabschluss erkennbar."
-            elif candidate.education >= int(req.value):
-                status, note = "erfuellt", f"{candidate.education_label} vorhanden."
-            else:
-                status, note = "teilweise", f"{candidate.education_label} (gefordert: höher)."
-
-        elif req.kind == "language":
-            if req.value in candidate.languages:
-                status, note = "erfuellt", "Sprache genannt."
-            else:
-                status, note = "offen", "Sprache nicht genannt."
-
-        results.append(
-            MatchResult(
-                requirement_id=req.id,
-                label=req.label,
-                kind=req.kind,
-                importance=req.importance,
-                status=status,
-                note=note,
-            )
-        )
-    return results
-
-
-# --- Backend dispatch: LLM first, rule-based fallback ------------------------
-#
-# Each dispatcher tries the LLM backend (llm_agents.py) and falls back to the
-# deterministic agent above if no API key is set or the call fails. It returns
-# (result, backend_label) so the audit log always records WHICH backend
-# produced a result — transparency requirement from the EU AI Act.
-
-def backend_label() -> str:
-    return f"LLM ({llm_agents.DEFAULT_MODEL})" if llm_agents.llm_available() else "regelbasiert"
-
-
-def summarize_backends(backends: list) -> str:
-    """Describe which backends actually produced the results, e.g.
-    "2x LLM (gpt-4o-mini), 1x regelbasiert".
-
-    Each item is dispatched independently and may fall back to the rule-based
-    agent on its own LLMError, so a single label cannot describe a batch. The
-    audit trail is this app's transparency record — it has to reflect what ran,
-    not whichever backend happened to run last.
-    """
-    if not backends:
-        return "keine"
-    counts = Counter(backends)
-    return ", ".join(f"{count}x {label}" for label, count in counts.most_common())
-
-
-def analyze_job_profile(text: str) -> tuple:
-    if llm_agents.llm_available():
-        try:
-            return llm_agents.stellenprofil_agent_llm(text), backend_label()
-        except llm_agents.LLMError as e:
-            audit("Stellenprofil-Agent", "LLM-Fehler — Fallback auf Regeln", str(e))
-    return stellenprofil_agent(text), "regelbasiert"
-
-
-def analyze_cv(name: str, source: str, text: str, idx: int) -> tuple:
-    if llm_agents.llm_available():
-        try:
-            return llm_agents.cv_agent_llm(name, source, text, idx), backend_label()
-        except llm_agents.LLMError as e:
-            audit("CV-Agent", "LLM-Fehler — Fallback auf Regeln", str(e))
-    return cv_agent(name, source, text, idx), "regelbasiert"
-
-
-def match_candidate(candidate: Candidate, requirements: list) -> tuple:
-    if llm_agents.llm_available():
-        try:
-            return llm_agents.matching_agent_llm(candidate, requirements), backend_label()
-        except llm_agents.LLMError as e:
-            audit("Matching-Agent", "LLM-Fehler — Fallback auf Regeln", str(e))
-    return matching_agent(candidate, requirements), "regelbasiert"
-
-
-# --- Agent 4: Informationslücken-Agent --------------------------------------
-
-def informationsluecken_agent(candidate: Candidate, matches: list) -> list:
-    """Identify missing or unclear information that blocks a clean assessment."""
-    gaps: list = []
-    for m in matches:
-        if m.status in ("offen", "teilweise"):
-            gaps.append(Gap(requirement_label=m.label, description=m.note))
-
-    if not candidate.email:
-        gaps.append(Gap(requirement_label="Kontaktdaten", description="Keine E-Mail-Adresse im Lebenslauf gefunden."))
-    if candidate.years is None:
-        gaps.append(Gap(requirement_label="Berufserfahrung", description="Dauer der Berufserfahrung unklar."))
-
-    return gaps
-
-
-# --- Agent 5: Rückfragen-Agent ----------------------------------------------
-
-def rueckfragen_agent(candidate: Candidate, gaps: list) -> list:
-    """Generate polite, candidate-facing follow-up questions for each gap."""
-    questions: list = []
-    seen = set()
-    for gap in gaps:
-        label = gap.requirement_label
-        if label in seen:
-            continue
-        seen.add(label)
-
-        if label == "Kontaktdaten":
-            q = "Könnten Sie uns bitte eine aktuelle E-Mail-Adresse für die Kontaktaufnahme nennen?"
-        elif label == "Berufserfahrung":
-            q = "Wie viele Jahre einschlägige Berufserfahrung bringen Sie insgesamt mit?"
-        elif label.startswith("Sprache:"):
-            lang = label.replace("Sprache:", "").strip()
-            q = f"Auf welchem Niveau beherrschen Sie {lang}? (z. B. fließend, verhandlungssicher, Muttersprache)"
-        elif label.startswith("Bildungsabschluss"):
-            q = "Welchen höchsten Bildungsabschluss haben Sie und in welchem Fachbereich?"
-        elif "Jahre Berufserfahrung" in label:
-            q = "Könnten Sie Ihre relevante Berufserfahrung für diese Position kurz beschreiben?"
-        else:
-            q = f"Könnten Sie Ihre Erfahrung im Bereich „{label}“ näher erläutern?"
-
-        questions.append(q)
-    return questions
-
-
-def generate_email(candidate: Candidate, selected_questions: list) -> tuple:
-    """Compose a polite follow-up e-mail draft from the selected questions.
-
-    Deterministic, template-based generation (no API key required). The draft
-    is NEVER sent automatically — it is only prepared for human review.
-    """
-    to = candidate.email or "bewerber@example.com"
-    subject = "Rückfragen zu Ihrer Bewerbung"
-    lines = [
-        f"Sehr geehrte/r {candidate.name},",
-        "",
-        "vielen Dank für Ihre Bewerbung und Ihr Interesse an der ausgeschriebenen "
-        "Position. Um Ihre Unterlagen vollständig und fair bewerten zu können, "
-        "hätten wir noch einige kurze Rückfragen an Sie:",
-        "",
-    ]
-    for i, q in enumerate(selected_questions, 1):
-        lines.append(f"{i}. {q}")
-    lines += [
-        "",
-        "Über eine kurze Rückmeldung würden wir uns sehr freuen. Bei Fragen stehen "
-        "wir Ihnen jederzeit gern zur Verfügung.",
-        "",
-        "Mit freundlichen Grüßen",
-        "Ihr Recruiting-Team",
-    ]
-    return to, subject, "\n".join(lines)
 
 
 # --- Agent 6: Audit-Log -----------------------------------------------------
@@ -511,22 +85,13 @@ def audit(agent: str, action: str, detail: str = "") -> None:
 def extract_text_from_upload(uploaded_file) -> str:
     """Read an uploaded PDF or TXT file as clean Markdown.
 
-    PDFs go through llm_agents.pdf_to_markdown (pymupdf4llm preferred, pypdf
-    fallback): Markdown preserves the document structure for the LLM while
-    costing far fewer tokens than raw layout text."""
+    PDFs go through llm_agents.pdf_to_markdown, which already tries pymupdf4llm
+    first and falls back to pypdf itself: Markdown preserves the document
+    structure for the LLM while costing far fewer tokens than raw layout text."""
     name = uploaded_file.name.lower()
     data = uploaded_file.read()
     if name.endswith(".pdf"):
-        md = llm_agents.pdf_to_markdown(data)
-        if md:
-            return md
-        if HAS_PYPDF:
-            try:
-                reader = PdfReader(io.BytesIO(data))
-                return "\n".join((page.extract_text() or "") for page in reader.pages)
-            except Exception:
-                return ""
-        return ""
+        return llm_agents.pdf_to_markdown(data)
     try:
         return llm_agents.clean_markdown(data.decode("utf-8", errors="ignore"))
     except Exception:
@@ -538,8 +103,10 @@ def run_full_analysis() -> None:
     reqs = st.session_state.requirements
     backends: list = []
     for cand in st.session_state.candidates:
-        cand.matches, backend = match_candidate(cand, reqs)
-        backends.append(backend)
+        run = match_candidate(cand, reqs)
+        audit_fallback("Matching-Agent", run)
+        cand.matches = run.result
+        backends.append(run.backend)
         cand.gaps = informationsluecken_agent(cand, cand.matches)
         cand.questions = rueckfragen_agent(cand, cand.gaps)
     audit(
@@ -602,18 +169,21 @@ Sprachen: Deutsch, Englisch, Französisch
 
 def load_demo_data() -> None:
     st.session_state.job_text = DEMO_JOB
-    st.session_state.requirements, backend = analyze_job_profile(DEMO_JOB)
+    job_run = analyze_job_profile(DEMO_JOB)
+    audit_fallback("Stellenprofil-Agent", job_run)
+    st.session_state.requirements = job_run.result
     audit(
         "Stellenprofil-Agent",
         "Demo-Stellenprofil analysiert",
-        f"{len(st.session_state.requirements)} Anforderungen erkannt (Backend: {backend}).",
+        f"{len(st.session_state.requirements)} Anforderungen erkannt (Backend: {job_run.backend}).",
     )
     st.session_state.candidates = []
     backends: list = []
     for i, (name, text) in enumerate(DEMO_CVS):
-        cand, backend = analyze_cv(name, "Demo-Daten", text, i)
-        backends.append(backend)
-        st.session_state.candidates.append(cand)
+        run = analyze_cv(name, "Demo-Daten", text, i)
+        audit_fallback("CV-Agent", run)
+        backends.append(run.backend)
+        st.session_state.candidates.append(run.result)
     audit(
         "CV-Agent",
         "Demo-Bewerbungen analysiert",
@@ -647,397 +217,16 @@ def init_state() -> None:
 #  UI / LAYOUT / CSS
 # =============================================================================
 
-GLOBAL_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@lru_cache(maxsize=None)
+def load_css() -> str:
+    """Return the app's stylesheet, wrapped in a <style> tag.
 
-:root{
-  --rai-purple:#7c5cff;
-  --rai-blue:#3b82f6;
-  --rai-cyan:#22d3ee;
-  --rai-ink:#0f1226;
-  --rai-muted:#5b6178;
-}
-
-html, body, [class*="css"], .stApp{
-  font-family:'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
-
-/* App background: one continuous premium gradient that the hero melts into
-   (kept fixed so it never seams as you scroll) */
-.stApp{
-  background:
-    radial-gradient(1300px 780px at 80% 4%, rgba(124,92,255,.20), transparent 58%),
-    radial-gradient(1150px 700px at 104% -2%, rgba(59,130,246,.16), transparent 56%),
-    radial-gradient(1000px 700px at -6% 2%, rgba(124,92,255,.10), transparent 60%),
-    linear-gradient(180deg,#f7f6ff 0%, #f4f4fc 52%, #fbfbff 100%);
-  background-attachment:fixed;
-}
-
-/* Hide default Streamlit chrome for a cleaner product feel */
-#MainMenu{visibility:hidden;}
-footer{visibility:hidden;}
-header[data-testid="stHeader"]{display:none !important;}
-[data-testid="stToolbar"]{display:none !important;}
-[data-testid="stDecoration"]{display:none !important;}
-
-/* No top padding: the nav floats over a true full-screen hero */
-.block-container{padding-top:.7rem; padding-bottom:4rem; max-width:1180px;}
-
-/* Headings */
-h1,h2,h3{ color:var(--rai-ink); letter-spacing:-.02em; }
-
-/* Glass cards */
-.glass{
-  background:rgba(255,255,255,.65);
-  backdrop-filter:blur(18px);
-  -webkit-backdrop-filter:blur(18px);
-  border:1px solid rgba(255,255,255,.7);
-  border-radius:24px;
-  box-shadow:0 18px 50px rgba(31,38,93,.10);
-  padding:30px 32px;
-}
-
-/* Section spacing */
-.section{ margin:64px 0 24px; }
-.eyebrow{
-  display:inline-block; font-size:.78rem; font-weight:700; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--rai-purple);
-  background:rgba(124,92,255,.10); padding:6px 14px; border-radius:999px; margin-bottom:14px;
-}
-.section h2{ font-size:clamp(1.7rem,3.4vw,2.6rem); font-weight:800; margin:0 0 10px; }
-.section .lead{ color:var(--rai-muted); font-size:1.06rem; max-width:680px; line-height:1.6; }
-
-/* Feature / problem grid */
-.grid{ display:grid; gap:20px; }
-.grid-3{ grid-template-columns:repeat(3,1fr); }
-.grid-2{ grid-template-columns:repeat(2,1fr); }
-@media (max-width:900px){ .grid-3,.grid-2{ grid-template-columns:1fr; } }
-
-.card{
-  background:rgba(255,255,255,.7);
-  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  border:1px solid rgba(124,92,255,.10);
-  border-radius:22px; padding:26px 24px;
-  box-shadow:0 12px 36px rgba(31,38,93,.07);
-  transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease, border-color .35s ease;
-}
-.card:hover{ transform:translateY(-6px); box-shadow:0 26px 60px rgba(124,92,255,.18); border-color:rgba(124,92,255,.30); }
-.card .ic{
-  width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;
-  font-size:22px;margin-bottom:16px;
-  background:linear-gradient(135deg,var(--rai-purple),var(--rai-blue)); color:#fff;
-  box-shadow:0 8px 20px rgba(124,92,255,.35);
-}
-.card h3{ font-size:1.16rem; font-weight:700; margin:0 0 8px; }
-.card p{ color:var(--rai-muted); font-size:.96rem; line-height:1.55; margin:0; }
-.step-num{ font-size:.8rem;font-weight:800;color:var(--rai-blue);letter-spacing:.1em; }
-
-/* Scroll reveal (driven by an IntersectionObserver — see render_scroll_reveal) */
-@keyframes fadeUp{ from{opacity:0; transform:translateY(26px);} to{opacity:1; transform:translateY(0);} }
-.reveal{ opacity:0; transform:translateY(36px);
-  transition:opacity .85s ease, transform .85s cubic-bezier(.2,.8,.2,1); }
-.reveal.reveal-in{ opacity:1; transform:none; }
-
-/* Buttons (Streamlit) */
-.stButton > button{
-  border-radius:14px; font-weight:600; padding:.6rem 1.2rem; border:1px solid rgba(124,92,255,.25);
-  background:rgba(255,255,255,.8); color:var(--rai-ink); transition:all .25s ease;
-}
-.stButton > button:hover{ border-color:var(--rai-purple); color:var(--rai-purple); transform:translateY(-2px); }
-.stButton > button[kind="primary"]{
-  background:linear-gradient(135deg,var(--rai-purple),var(--rai-blue)); color:#fff; border:none;
-  box-shadow:0 12px 30px rgba(124,92,255,.40);
-}
-.stButton > button[kind="primary"]:hover{ filter:brightness(1.06); transform:translateY(-2px); color:#fff; }
-
-/* Status pills */
-.pill{ display:inline-block; padding:4px 12px; border-radius:999px; font-size:.8rem; font-weight:700; }
-.pill-ok{ background:rgba(16,185,129,.14); color:#0f9d6b; }
-.pill-part{ background:rgba(245,158,11,.16); color:#b4790c; }
-.pill-open{ background:rgba(99,102,241,.14); color:#4f46e5; }
-.pill-no{ background:rgba(239,68,68,.14); color:#dc2626; }
-
-/* HITL banner */
-.hitl{
-  background:linear-gradient(135deg, rgba(124,92,255,.12), rgba(34,211,238,.10));
-  border:1px solid rgba(124,92,255,.22); border-radius:20px; padding:22px 26px; color:var(--rai-ink);
-}
-.hitl b{ color:var(--rai-purple); }
-
-/* Candidate tiles */
-.cand{
-  background:rgba(255,255,255,.72); border:1px solid rgba(124,92,255,.12); border-radius:20px;
-  padding:20px 22px; box-shadow:0 10px 30px rgba(31,38,93,.06);
-  transition:transform .3s ease, box-shadow .3s ease;
-}
-.cand:hover{ transform:translateY(-4px); box-shadow:0 20px 44px rgba(124,92,255,.16); }
-.cand .nm{ font-weight:700; font-size:1.1rem; color:var(--rai-ink); }
-.cand .meta{ color:var(--rai-muted); font-size:.9rem; margin-top:4px; }
-
-.tag{ display:inline-block; background:rgba(59,130,246,.10); color:#2563eb; border-radius:8px;
-  padding:3px 9px; font-size:.78rem; font-weight:600; margin:3px 4px 0 0; }
-
-/* Smooth scrolling between sections */
-html{ scroll-behavior:smooth; }
-/* `clip` (not `hidden`) prevents the 100vw hero from creating a horizontal
-   scrollbar WITHOUT turning body into a scroll container — which would break
-   the sticky navbar. */
-html, body{ overflow-x:clip; max-width:100%; }
-
-/* Glass navigation bar (only the nav row carries the .navbar-mark) — appears
-   after the intro. Subtle, slow clockwise LED border in the brand colors. */
-[data-testid="stHorizontalBlock"]:has(.navbar-mark){
-  /* fixed (not sticky): Streamlit's scroll container makes sticky unreliable,
-     so we pin the bar to the top of the viewport and center it. It stays
-     visible the whole time while scrolling. */
-  position:fixed; top:14px; left:50%; transform:translateX(-50%);
-  width:min(1180px, calc(100vw - 40px)); z-index:1000;
-  background:rgba(255,255,255,.40);
-  backdrop-filter:blur(24px) saturate(1.7); -webkit-backdrop-filter:blur(24px) saturate(1.7);
-  border:1px solid rgba(255,255,255,.55); border-radius:18px;
-  /* soft floating shadow + colored outer glow + inner top highlight */
-  box-shadow:0 12px 36px rgba(31,38,93,.12), 0 0 30px rgba(124,92,255,.22),
-             inset 0 1px 0 rgba(255,255,255,.7);
-  padding:7px 18px !important; align-items:center;
-}
-/* anchor targets clear the fixed bar when jumping via the nav links */
-#problem,#loesung,#schritte,#preise{ scroll-margin-top:100px; }
-[data-testid="stHorizontalBlock"]:has(.navbar-mark)::before{
-  content:""; position:absolute; inset:0; border-radius:inherit; padding:1.6px;
-  background:conic-gradient(from var(--ledangle),
-    #7c5cff 0deg, #a78bfa 70deg, #ffffff 140deg, #60a5fa 215deg, #22d3ee 290deg, #7c5cff 360deg);
-  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor; mask-composite:exclude;
-  opacity:.9; pointer-events:none; animation:ledspin 7s linear infinite;
-  filter:drop-shadow(0 0 5px rgba(124,92,255,.5)); }
-.navbar-mark{ display:none; }
-
-/* Raycast/Linear-style inline nav links, centered in the bar */
-.navlinks{ display:flex; align-items:center; justify-content:center; gap:4px;
-  flex-wrap:nowrap; transform:translateY(-2px); }
-.navlinks a{ color:#3b4060; text-decoration:none; font-weight:600; font-size:.93rem;
-  padding:7px 14px; border-radius:11px; white-space:nowrap; letter-spacing:-.01em;
-  transition:color .2s ease, background .2s ease; }
-.navlinks a:hover{ color:#7c5cff; background:rgba(124,92,255,.09); }
-
-/* Perfectly center every navbar column on one baseline (Linear/Vercel style):
-   one fixed bar height, each column is a centered flex box, and all stray
-   Streamlit margins/gaps are zeroed so nothing sits high or low. */
-[data-testid="stHorizontalBlock"]:has(.navbar-mark){ min-height:58px; }
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="column"]{
-  display:flex !important; align-items:center !important; align-self:center !important; }
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="column"] > div,
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="stVerticalBlock"]{
-  width:100%; gap:0 !important; }
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="stElementContainer"],
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) .stMarkdown,
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) .stButton{ margin:0 !important; }
-[data-testid="stHorizontalBlock"]:has(.navbar-mark) .stButton > button{
-  margin:0 !important; line-height:1.1; }
-.navlinks{ line-height:1; }
-.navlinks a{ display:inline-flex; align-items:center; line-height:1; }
-
-/* Top navigation dropdown */
-[data-testid="column"]{ overflow:visible !important; }
-.navdrop{ position:relative; display:inline-flex; align-items:center; padding-top:6px; }
-.navdrop .navbtn{ display:inline-flex; align-items:center; gap:7px; cursor:pointer;
-  font-weight:600; font-size:.95rem; color:#0f1226; background:rgba(255,255,255,.7);
-  border:1px solid rgba(124,92,255,.18); padding:8px 16px; border-radius:12px; transition:all .25s ease; }
-.navdrop:hover .navbtn{ border-color:#7c5cff; color:#7c5cff; }
-.navdrop .navbtn .car{ transition:transform .25s ease; }
-.navdrop:hover .navbtn .car{ transform:rotate(180deg); }
-.navdrop .navmenu{ position:absolute; top:calc(100% + 8px); left:0; min-width:220px;
-  background:#fff; border:1px solid rgba(124,92,255,.14); border-radius:16px;
-  box-shadow:0 24px 60px rgba(31,38,93,.18); padding:8px; z-index:2000;
-  opacity:0; visibility:hidden; transform:translateY(8px); transition:all .25s cubic-bezier(.2,.8,.2,1); }
-.navdrop:hover .navmenu{ opacity:1; visibility:visible; transform:translateY(0); }
-.navmenu a{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px;
-  color:#0f1226; text-decoration:none; font-size:.95rem; font-weight:500; }
-.navmenu a:hover{ background:rgba(124,92,255,.10); color:#7c5cff; }
-
-/* Full-bleed component iframes (Spline background graphics span the viewport).
-   Streamlit gives the component iframe the title "st.iframe" in some versions
-   and "streamlit_components.v1.html.html" in others — cover both, and make the
-   iframe transparent so no white box shows around the scene. */
-.element-container:has(iframe[title="st.iframe"]),
-.element-container:has(iframe[title="streamlit_components.v1.html.html"]){
-  width:100vw !important;
-  margin-left:calc(50% - 50vw) !important;
-  margin-right:calc(50% - 50vw) !important;
-}
-iframe[title="st.iframe"],
-iframe[title="streamlit_components.v1.html.html"]{
-  width:100vw !important; border:none !important; background:transparent !important;
-  color-scheme:normal;
-}
-
-/* ===================== Premium scroll-storytelling ===================== */
-/* Hero background image (bright pastel brand graphic) — full viewport */
-.vhero{ position:relative; width:100vw; margin-left:calc(50% - 50vw);
-  /* full-screen hero, pulled up behind the floating nav. No box: the image is
-     feathered on every edge so it dissolves into the page gradient. */
-  margin-top:-14px; height:100vh; min-height:640px; overflow:hidden; z-index:0; }
-.vhero-bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;
-  opacity:.92;
-  /* Strong intersecting feather masks so NO edge is ever visible: the bottom
-     and right both fade out over a very wide band, dissolving the wave fully
-     into the page gradient (top stays solid behind the nav). */
-  -webkit-mask:
-    linear-gradient(180deg, rgba(0,0,0,0) 0, #000 9%, #000 34%, rgba(0,0,0,0) 84%),
-    linear-gradient(90deg, rgba(0,0,0,0) 0, #000 24%, #000 48%, rgba(0,0,0,0) 86%);
-  -webkit-mask-composite:source-in;
-          mask-image:
-    linear-gradient(180deg, rgba(0,0,0,0) 0, #000 9%, #000 34%, rgba(0,0,0,0) 84%),
-    linear-gradient(90deg, rgba(0,0,0,0) 0, #000 24%, #000 48%, rgba(0,0,0,0) 86%);
-          mask-composite:intersect; }
-.vhero-scrim{ position:absolute; inset:0; pointer-events:none;
-  /* not a box anymore — just a soft radial light behind the headline for depth
-     and legibility, fully transparent everywhere else */
-  background:radial-gradient(58% 52% at 24% 44%, rgba(255,255,255,.34), rgba(255,255,255,0) 72%); }
-.vhero-copy{ position:absolute; top:50%; left:max(24px, calc(50vw - 530px)); transform:translateY(-50%);
-  max-width:560px; z-index:2; }
-/* Lift the hero's primary CTA up so it sits inside the hero, not in empty space */
-[data-testid="stHorizontalBlock"]:has(.cta-lift){ margin-top:-19vh; position:relative; z-index:3; }
-.story{ max-width:1060px; margin:0 auto; padding:120px 0 24px; }
-.story.first{ padding-top:56px; }
-.kicker{ font-size:.8rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase;
-  color:var(--rai-purple); margin-bottom:18px; }
-.display{ font-size:clamp(2.5rem,5.4vw,4.6rem); font-weight:900; letter-spacing:-.035em;
-  line-height:1.02; color:var(--rai-ink); margin:0; }
-.display .g{ background:linear-gradient(120deg,#7c5cff,#3b82f6,#22d3ee);
-  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
-.story .big{ font-size:1.28rem; line-height:1.65; color:var(--rai-muted); max-width:640px; margin:26px 0 0; }
-.story .small{ font-size:1.04rem; line-height:1.6; color:var(--rai-muted); max-width:560px; margin:18px 0 0; }
-
-.split{ display:grid; grid-template-columns:1.02fr .98fr; gap:64px; align-items:center; }
-.split.rev{ grid-template-columns:.98fr 1.02fr; }
-@media(max-width:900px){ .split,.split.rev{ grid-template-columns:1fr; gap:34px; } }
-
-.media-wrap{ border-radius:30px; overflow:hidden; border:1px solid rgba(124,92,255,.12);
-  box-shadow:0 36px 90px rgba(31,38,93,.18); line-height:0; }
-.media-wrap img{ width:100%; height:auto; display:block; }
-
-/* stat widgets (colored, interactive on hover, centered) */
-.stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; max-width:920px; margin:0 auto; }
-@media(max-width:900px){ .stats{ grid-template-columns:1fr; gap:18px; } }
-.stat{ position:relative; text-align:center; padding:30px 24px; border-radius:24px; background:rgba(255,255,255,.72);
-  border:1px solid rgba(124,92,255,.12); box-shadow:0 14px 40px rgba(31,38,93,.07);
-  transition:transform .4s cubic-bezier(.2,.8,.2,1), box-shadow .4s ease, border-color .4s ease; }
-.stat:hover{ transform:translateY(-10px); box-shadow:0 34px 74px rgba(124,92,255,.22);
-  border-color:rgba(124,92,255,.35); }
-.stat .ic{ width:54px;height:54px;margin:0 auto 14px;border-radius:16px;display:flex;
-  align-items:center;justify-content:center;font-size:25px;
-  background:linear-gradient(135deg,#7c5cff,#3b82f6); color:#fff;
-  box-shadow:0 10px 24px rgba(124,92,255,.35);
-  transition:transform .5s cubic-bezier(.2,.8,.2,1); }
-.stat:hover .ic{ transform:translateY(-4px) rotate(-6deg) scale(1.1); }
-.stat.c2 .ic{ background:linear-gradient(135deg,#3b82f6,#22d3ee); box-shadow:0 10px 24px rgba(59,130,246,.35); }
-.stat.c3 .ic{ background:linear-gradient(135deg,#22d3ee,#7c5cff); box-shadow:0 10px 24px rgba(34,211,238,.35); }
-.stat .n{ display:inline-block; font-size:clamp(2.2rem,4.4vw,3.2rem); font-weight:900; letter-spacing:-.03em;
-  background:linear-gradient(120deg,#7c5cff,#22d3ee); -webkit-background-clip:text;
-  background-clip:text; -webkit-text-fill-color:transparent;
-  transition:transform .4s cubic-bezier(.2,.8,.2,1); }
-.stat:hover .n{ transform:scale(1.07); }
-.stat .l{ color:var(--rai-muted); font-size:1.0rem; margin-top:6px; }
-
-/* clean numbered steps */
-.steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
-@media(max-width:900px){ .steps{ grid-template-columns:1fr; } }
-.stepcard{ padding:30px 26px; border-radius:24px; background:rgba(255,255,255,.7);
-  border:1px solid rgba(124,92,255,.10); box-shadow:0 14px 40px rgba(31,38,93,.07);
-  transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease; }
-.stepcard:hover{ transform:translateY(-6px); box-shadow:0 28px 64px rgba(124,92,255,.16); }
-.stepcard .k{ font-size:.82rem; font-weight:800; letter-spacing:.12em; color:var(--rai-blue); }
-.stepcard h3{ font-size:1.2rem; font-weight:800; margin:12px 0 8px; }
-.stepcard p{ color:var(--rai-muted); font-size:.98rem; line-height:1.55; margin:0; }
-
-/* pricing */
-.pricing{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; align-items:stretch; }
-@media(max-width:900px){ .pricing{ grid-template-columns:1fr; } }
-.price{ position:relative; display:flex; flex-direction:column; padding:34px 30px; border-radius:26px;
-  background:rgba(255,255,255,.72); border:1px solid rgba(124,92,255,.12);
-  box-shadow:0 16px 44px rgba(31,38,93,.08);
-  transition:transform .4s cubic-bezier(.2,.8,.2,1), box-shadow .4s ease, border-color .4s ease; }
-.price:hover{ transform:translateY(-10px); box-shadow:0 34px 74px rgba(124,92,255,.22);
-  border-color:rgba(124,92,255,.40); }
-.price.p1{ background:linear-gradient(180deg, rgba(124,92,255,.07), rgba(255,255,255,.72)); }
-.price.p3{ background:linear-gradient(180deg, rgba(34,211,238,.07), rgba(255,255,255,.72)); }
-.price.feat{ background:linear-gradient(160deg,rgba(124,92,255,.12),rgba(34,211,238,.09));
-  border:1px solid rgba(124,92,255,.30); box-shadow:0 26px 70px rgba(124,92,255,.20); }
-.price.feat:hover{ transform:translateY(-13px); box-shadow:0 40px 84px rgba(124,92,255,.28); }
-.price .pn{ font-weight:800; font-size:1.05rem; color:var(--rai-ink); }
-.price .pp{ font-size:2.6rem; font-weight:900; letter-spacing:-.03em; margin:10px 0 2px; color:var(--rai-ink); }
-.price .pp small{ font-size:.95rem; font-weight:600; color:var(--rai-muted); }
-.price ul{ list-style:none; padding:0; margin:18px 0 0; }
-.price li{ color:var(--rai-muted); font-size:.98rem; padding:7px 0 7px 26px; position:relative; }
-.price li:before{ content:"✓"; position:absolute; left:0; color:#0f9d6b; font-weight:800; }
-.price .badge-pop{ align-self:flex-start; font-size:.72rem; font-weight:800; letter-spacing:.08em;
-  text-transform:uppercase; color:#fff; background:linear-gradient(135deg,#7c5cff,#3b82f6);
-  padding:5px 12px; border-radius:999px; margin-bottom:12px; }
-
-/* Rotating LED glow border on hover (clockwise 360°, brand colors) */
-@property --ledangle{ syntax:"<angle>"; initial-value:0deg; inherits:false; }
-.stat::before, .stat::after, .price::before, .price::after{
-  content:""; position:absolute; inset:0; border-radius:inherit; padding:2px;
-  background:conic-gradient(from var(--ledangle),
-    rgba(124,92,255,0) 0deg, rgba(124,92,255,0) 235deg,
-    #7c5cff 290deg, #3b82f6 320deg, #22d3ee 350deg, rgba(34,211,238,0) 360deg);
-  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor; mask-composite:exclude;
-  opacity:0; pointer-events:none; transition:opacity .35s ease; }
-.stat::after, .price::after{ filter:blur(9px); }   /* soft neon glow layer */
-.price:hover::before, .price:hover::after{ opacity:1; animation:ledspin 2.5s linear infinite; }
-.stat:hover::before, .stat:hover::after{ opacity:1; animation:ledspin 2.5s linear infinite; }
-.price:hover::after{ opacity:.85; }
-@keyframes ledspin{ to{ --ledangle:360deg; } }
-
-/* horizontal scroll gallery (Raycast-style) */
-.bleed{ width:100vw; margin-left:calc(50% - 50vw); }
-.galfade{ position:relative; }
-/* thick, white fades on the left and right edges */
-.galfade:before, .galfade:after{ content:""; position:absolute; top:0; bottom:0; width:240px;
-  z-index:4; pointer-events:none; }
-.galfade:before{ left:0; background:linear-gradient(90deg, #ffffff 0%, rgba(255,255,255,.92) 30%, rgba(255,255,255,0) 100%); }
-.galfade:after{ right:0; background:linear-gradient(270deg, #ffffff 0%, rgba(255,255,255,.92) 30%, rgba(255,255,255,0) 100%); }
-@media(max-width:760px){ .galfade:before, .galfade:after{ width:90px; } }
-.hscroll{ display:flex; gap:24px; overflow-x:auto; scroll-snap-type:x mandatory;
-  -webkit-overflow-scrolling:touch; padding:12px 60px 34px; }
-.hscroll::-webkit-scrollbar{ height:8px; }
-.hscroll::-webkit-scrollbar-thumb{ background:rgba(124,92,255,.28); border-radius:99px; }
-.hscroll::-webkit-scrollbar-track{ background:transparent; }
-/* show ~3 cards at a time */
-.hcard{ flex:0 0 calc((100vw - 144px) / 3); max-width:560px; scroll-snap-align:center;
-  border-radius:24px; overflow:hidden; background:#fff; border:1px solid rgba(124,92,255,.12);
-  box-shadow:0 16px 44px rgba(31,38,93,.09);
-  transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease; }
-@media(max-width:760px){ .hcard{ flex:0 0 80vw; } }
-.hcard:hover{ transform:translateY(-6px); box-shadow:0 28px 64px rgba(124,92,255,.18); }
-.hcard img{ width:100%; height:300px; object-fit:cover; display:block;
-  background:linear-gradient(160deg,#f6f5ff,#eafaff); }
-.hcard .cap{ padding:18px 20px; }
-.hcard .cap .k{ font-size:.74rem; font-weight:800; letter-spacing:.12em; color:var(--rai-blue); }
-.hcard .cap h4{ margin:6px 0 6px; font-size:1.08rem; font-weight:800; color:var(--rai-ink); }
-.hcard .cap p{ margin:0; color:var(--rai-muted); font-size:.92rem; line-height:1.5; }
-
-/* Problem section: text overlaid on the full-bleed Spline background */
-/* Workspace header: title overlaid on a Spline banner */
-.ws-head{ position:relative; z-index:3; margin-top:-300px; height:300px; pointer-events:none; }
-.ws-copy{ max-width:1180px; margin:0 auto; padding-top:34px; }
-.ws-copy h2{ text-shadow:0 2px 22px rgba(255,255,255,.7); }
-.ws-copy .lead{ text-shadow:0 1px 14px rgba(255,255,255,.8); }
-
-.problem-wrap{ position:relative; z-index:3; margin-top:-420px; height:420px; pointer-events:none; }
-.problem-copy{ max-width:1060px; margin:0 auto; padding-top:54px; position:relative; }
-.problem-copy .display{ text-shadow:0 2px 24px rgba(255,255,255,.6); }
-.problem-copy .big{ text-shadow:0 1px 16px rgba(255,255,255,.7); }
-
-/* final cta band */
-.cta-band{ text-align:center; padding:70px 40px; border-radius:34px; margin:40px auto 0; max-width:1060px;
-  background:linear-gradient(140deg,rgba(124,92,255,.12),rgba(34,211,238,.10));
-  border:1px solid rgba(124,92,255,.20); }
-</style>
-"""
+    The CSS lives in static/styles.css rather than in a string literal here: at
+    ~390 lines it dominated this module, and a real .css file gets editor
+    support. Cached because Streamlit re-runs this script on every interaction.
+    """
+    css = (Path(__file__).parent / "static" / "styles.css").read_text(encoding="utf-8")
+    return f"<style>\n{css}\n</style>"
 
 
 def _h(value: object) -> str:
@@ -1584,11 +773,13 @@ def render_workspace() -> None:
         if st.button("🎯 Stellenprofil analysieren", type="primary"):
             if st.session_state.job_text.strip():
                 with st.spinner(f"Stellenprofil-Agent extrahiert Anforderungen … (Backend: {backend_label()})"):
-                    st.session_state.requirements, backend = analyze_job_profile(st.session_state.job_text)
+                    job_run = analyze_job_profile(st.session_state.job_text)
+                audit_fallback("Stellenprofil-Agent", job_run)
+                st.session_state.requirements = job_run.result
                 audit(
                     "Stellenprofil-Agent",
                     "Stellenprofil analysiert",
-                    f"{len(st.session_state.requirements)} Anforderung(en) erkannt (Backend: {backend}).",
+                    f"{len(st.session_state.requirements)} Anforderung(en) erkannt (Backend: {job_run.backend}).",
                 )
                 st.session_state.analysis_done = False
                 st.success(f"{len(st.session_state.requirements)} Anforderung(en) erkannt.")
@@ -1611,8 +802,9 @@ def render_workspace() -> None:
     with tabs[1]:
         st.subheader("CV-Agent")
         st.caption("Lade Lebensläufe als PDF oder TXT hoch — oder füge Text manuell ein.")
-        if not HAS_PYPDF:
-            st.info("Hinweis: `pypdf` ist nicht installiert — PDF-Text kann nicht gelesen werden. TXT-Upload und manuelle Eingabe funktionieren.")
+        if not llm_agents.pdf_support_available():
+            st.info("Hinweis: Es ist keine PDF-Bibliothek installiert (`pymupdf4llm` oder `pypdf`) — "
+                    "PDF-Text kann nicht gelesen werden. TXT-Upload und manuelle Eingabe funktionieren.")
 
         uploaded = st.file_uploader(
             "Bewerbungen hochladen",
@@ -1636,14 +828,16 @@ def render_workspace() -> None:
                         # optimization + structure preservation)
                         text = extract_text_from_upload(f)
                         base_name = f.name.rsplit(".", 1)[0]
-                        cand, backend = analyze_cv(base_name, f.name, text, idx)
-                        backends.append(backend)
-                        new_candidates.append(cand)
+                        run = analyze_cv(base_name, f.name, text, idx)
+                        audit_fallback("CV-Agent", run)
+                        backends.append(run.backend)
+                        new_candidates.append(run.result)
                         idx += 1
                 if manual.strip():
-                    cand, backend = analyze_cv(f"Kandidat {idx + 1}", "Manuelle Eingabe", manual, idx)
-                    backends.append(backend)
-                    new_candidates.append(cand)
+                    run = analyze_cv(f"Kandidat {idx + 1}", "Manuelle Eingabe", manual, idx)
+                    audit_fallback("CV-Agent", run)
+                    backends.append(run.backend)
+                    new_candidates.append(run.result)
                     idx += 1
 
             if new_candidates:
@@ -1908,7 +1102,7 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="collapsed",
     )
-    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+    st.markdown(load_css(), unsafe_allow_html=True)
     init_state()
 
     # --- Intro gate -------------------------------------------------------

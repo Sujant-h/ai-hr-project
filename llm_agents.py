@@ -92,6 +92,15 @@ def llm_available() -> bool:
     return HAS_OPENAI and bool(os.getenv("OPENAI_API_KEY"))
 
 
+def pdf_support_available() -> bool:
+    """True when at least one PDF extraction backend is installed.
+
+    pdf_to_markdown prefers pymupdf4llm and falls back to pypdf, so PDF upload
+    works as long as either one is present.
+    """
+    return HAS_PYMUPDF4LLM or HAS_PYPDF
+
+
 def _get_client() -> "OpenAI":
     global _client
     if _client is None:

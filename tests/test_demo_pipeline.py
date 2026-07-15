@@ -7,23 +7,24 @@ state. It runs every agent in sequence and asserts the contract the UI relies on
 from __future__ import annotations
 
 import app
+from agents import rules
 from models import EDU_LEVELS
 
 
 def _run_pipeline():
-    requirements = app.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
     candidates = [
-        app.cv_agent(name, "Demo-Daten", text, i) for i, (name, text) in enumerate(app.DEMO_CVS)
+        rules.cv_agent(name, "Demo-Daten", text, i) for i, (name, text) in enumerate(app.DEMO_CVS)
     ]
     for cand in candidates:
-        cand.matches = app.matching_agent(cand, requirements)
-        cand.gaps = app.informationsluecken_agent(cand, cand.matches)
-        cand.questions = app.rueckfragen_agent(cand, cand.gaps)
+        cand.matches = rules.matching_agent(cand, requirements)
+        cand.gaps = rules.informationsluecken_agent(cand, cand.matches)
+        cand.questions = rules.rueckfragen_agent(cand, cand.gaps)
     return requirements, candidates
 
 
 def test_demo_job_yields_the_expected_requirements():
-    requirements = app.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
     labels = {r.label for r in requirements}
 
     assert {"Python", "SQL", "AWS", "Docker"} <= labels
@@ -34,7 +35,7 @@ def test_demo_job_yields_the_expected_requirements():
 
 def test_demo_job_marks_scrum_line_as_optional():
     """'Projektmanagement und Scrum wünschenswert' is a nice-to-have."""
-    requirements = app.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
     pm = next(r for r in requirements if r.label == "Projektmanagement")
     assert pm.importance == "kann"
 
@@ -103,7 +104,7 @@ def test_agents_never_rank_or_score_candidates():
 def test_email_draft_is_composed_but_not_sent():
     _, candidates = _run_pipeline()
     lena = candidates[0]
-    to, subject, body = app.generate_email(lena, lena.questions[:2])
+    to, subject, body = rules.generate_email(lena, lena.questions[:2])
 
     assert to == "lena.hoffmann@example.com"
     assert subject

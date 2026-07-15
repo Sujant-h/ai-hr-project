@@ -8,6 +8,7 @@ so it must be escaped before interpolation.
 from __future__ import annotations
 
 import app
+from agents import rules
 
 XSS_PAYLOAD = "<img src=x onerror=alert(1)>"
 
@@ -16,7 +17,7 @@ def test_cv_agent_name_is_attacker_controlled():
     """Documents the hazard the escaping defends against: cv_agent lifts the
     display name straight out of the uploaded document via regex, so whatever
     the CV says lands in Candidate.name."""
-    cand = app.cv_agent("Fallback-Name", "cv.pdf", f"Name: {XSS_PAYLOAD}", 0)
+    cand = rules.cv_agent("Fallback-Name", "cv.pdf", f"Name: {XSS_PAYLOAD}", 0)
     assert XSS_PAYLOAD in cand.name
 
 
@@ -42,7 +43,7 @@ def test_escaping_handles_non_string_values():
 def test_uploaded_cv_name_is_safe_once_escaped():
     """End-to-end for the realistic vector: a malicious CV through the agent,
     then through the escaping the render sites apply."""
-    cand = app.cv_agent("Fallback-Name", "cv.pdf", f"Name: {XSS_PAYLOAD}", 0)
+    cand = rules.cv_agent("Fallback-Name", "cv.pdf", f"Name: {XSS_PAYLOAD}", 0)
     rendered = f'<span class="nm">{app._h(cand.name)}</span>'
     assert "<img" not in rendered
     assert "&lt;img" in rendered

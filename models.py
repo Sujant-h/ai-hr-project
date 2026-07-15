@@ -9,7 +9,7 @@ from here, so the two backends stay interchangeable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 
 EDU_LEVELS = {
     "kein abschluss": 0,
@@ -24,6 +24,13 @@ EDU_LEVELS = {
 }
 EDU_LABELS = {0: "kein Abschluss", 1: "Ausbildung", 2: "Bachelor", 3: "Master / Diplom", 4: "Promotion"}
 
+# The vocabularies the agents and the UI agree on. Spelled out as Literals so a
+# typo in a status or importance is caught by a type checker, rather than by a
+# recruiter noticing a blank pill in the UI.
+Kind = Literal["skill", "experience", "education", "language"]
+Importance = Literal["muss", "kann"]
+Status = Literal["erfuellt", "teilweise", "offen", "nicht_erfuellt"]
+
 
 @dataclass
 class Requirement:
@@ -31,9 +38,10 @@ class Requirement:
 
     id: str
     label: str
-    kind: str  # 'skill' | 'experience' | 'education' | 'language'
-    value: object  # str for skill/language, int for experience years / education level
-    importance: str = "muss"  # 'muss' | 'kann'
+    kind: Kind
+    # str for skill/language, int for experience years and education level
+    value: str | int
+    importance: Importance = "muss"
 
 
 @dataclass
@@ -44,25 +52,25 @@ class Candidate:
     name: str
     source: str
     raw_text: str
-    skills: list = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
     years: Optional[int] = None
     education: int = 0
     education_label: str = "unbekannt"
-    languages: list = field(default_factory=list)
+    languages: list[str] = field(default_factory=list)
     email: Optional[str] = None
     # Computed by later agents:
-    matches: list = field(default_factory=list)  # list[MatchResult]
-    gaps: list = field(default_factory=list)  # list[Gap]
-    questions: list = field(default_factory=list)  # list[str]
+    matches: list[MatchResult] = field(default_factory=list)
+    gaps: list[Gap] = field(default_factory=list)
+    questions: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MatchResult:
     requirement_id: str
     label: str
-    kind: str
-    importance: str
-    status: str  # 'erfuellt' | 'teilweise' | 'offen' | 'nicht_erfuellt'
+    kind: Kind
+    importance: Importance
+    status: Status
     note: str = ""
 
 
