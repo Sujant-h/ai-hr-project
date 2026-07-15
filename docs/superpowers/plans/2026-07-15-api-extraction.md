@@ -669,13 +669,30 @@ git commit -m "Extract the analysis core as a pure function"
 
 **Files:**
 - Modify: `app.py:158-189`
-- Test: `tests/test_run_full_analysis.py` (unchanged — it must still pass)
+- Modify: `tests/test_run_full_analysis.py:40,65,74,94,110,133,146` (patch target only — assertions stay untouched)
 
 **Interfaces:**
 - Consumes: `api.orchestration.analyze_candidates`, `api.orchestration.derive_gaps_and_questions`, `api.orchestration.batch_summary_entries`
 - Produces: nothing new
 
-**Why:** this is the task that proves the extraction is correct. `test_run_full_analysis.py` is **not modified** — if the Streamlit path still passes its existing tests against the new core, the core is faithful. The cache and session writes stay in `app.py`; only the shared logic is delegated.
+**Why:** this is the task that proves the extraction is correct. The cache and
+session writes stay in `app.py`; only the shared logic is delegated.
+
+**The one change allowed in the test file, and why.** `test_run_full_analysis.py`
+patches `app.match_candidate`. Once `run_full_analysis` delegates, the call
+resolves through `orchestration`'s globals instead, so that patch stops
+intercepting and the real dispatcher runs. The patch target must move with the
+code: `monkeypatch.setattr(orchestration, "match_candidate", ...)`.
+
+**Nothing else in that file may change** — not an assertion, not a fixture value,
+not a test name. Three of its tests (`test_second_run_is_served_from_cache`,
+`test_changing_the_job_profile_invalidates_the_cache`,
+`test_a_failed_llm_call_is_retried_on_the_next_run`) are the **only** integration
+coverage of `app.py`'s cache: that a cached candidate is skipped, and that a
+fallback is retried rather than pinned. `test_parallel_cache.py` covers
+`cache_get`/`cache_put` in isolation but never proves `run_full_analysis` honours
+them. Those three are also the specification Phase 3 ports to Vitest. If any
+assertion needs weakening to pass, the extraction is wrong — stop and report.
 
 **The `backends` list is the subtle part.** It must carry one entry per candidate
 *the user sees*, in candidate order, pulling each cached candidate's original
@@ -736,22 +753,44 @@ from api.orchestration import analyze_candidates, batch_summary_entries, derive_
 
 `app.py` no longer needs `informationsluecken_agent` / `rueckfragen_agent` / `summarize_backends` imported for this function — remove them from the import block **only if** no other code in `app.py` uses them (`_tab_rueckfragen` and `load_demo_data` may).
 
-- [ ] **Step 2: Run the unmodified integration tests**
+- [ ] **Step 2: Repoint the fixture's patch target**
+
+In `tests/test_run_full_analysis.py`, add to the imports:
+
+```python
+from api import orchestration
+```
+
+Then change **only** the patch target on each `monkeypatch.setattr` that targets
+`app.match_candidate` — `app` becomes `orchestration`, the stub is unchanged:
+
+```python
+monkeypatch.setattr(orchestration, "match_candidate", lambda cand, reqs: _match_for(cand))
+```
+
+That appears at lines 65, 74, 94, 110, 133 and 146. `_match_for` returns
+`app.AgentRun`; leave it as it is. Line 40 (`monkeypatch.setattr(app.st,
+"session_state", state)`) is Streamlit's session and stays pointed at `app`.
+
+**Change nothing else in this file** — no assertion, no fixture value, no test
+name. Those assertions are the specification.
+
+- [ ] **Step 3: Run the integration tests**
 
 Run: `pytest tests/test_run_full_analysis.py -v`
-Expected: all 6 PASS, unchanged. Including `test_second_run_is_served_from_cache` and `test_a_failed_llm_call_is_retried_on_the_next_run` — the cache semantics must survive the delegation exactly.
+Expected: all 6 PASS. Including `test_second_run_is_served_from_cache` and `test_a_failed_llm_call_is_retried_on_the_next_run` — the cache semantics must survive the delegation exactly.
 
-- [ ] **Step 3: Run the whole suite**
+- [ ] **Step 4: Run the whole suite**
 
 Run: `pytest -v`
 Expected: all PASS.
 
-- [ ] **Step 4: Verify the app end to end**
+- [ ] **Step 5: Verify the app end to end**
 
 Run: `streamlit run app.py`, click "✨ Demo-Daten laden", open the Audit Log tab.
 Expected: three candidates with matches, gaps and questions; the audit log shows "3 Kandidat(en) gegen N Anforderung(en) geprüft (Backend: 3x regelbasiert)". Ctrl-C.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add app.py
@@ -1201,7 +1240,7 @@ def post_job_profile(payload: JobProfileIn) -> JobProfileOut:
 Run: `pytest tests/test_api_job_profile.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add api/main.py tests/test_api_job_profile.py
@@ -1357,7 +1396,7 @@ async def post_cv(
 Run: `pytest tests/test_api_cv.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add api/main.py tests/test_api_cv.py
@@ -1544,7 +1583,7 @@ def post_analysis(payload: AnalysisIn) -> AnalysisOut:
 Run: `pytest tests/test_api_analysis.py -v`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add api/main.py tests/test_api_analysis.py
@@ -1659,7 +1698,7 @@ def post_email(payload: EmailIn) -> EmailOut:
 Run: `pytest tests/test_api_email.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add api/main.py tests/test_api_email.py
