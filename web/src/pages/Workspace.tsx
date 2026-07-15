@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { useSessionStore } from '../store/session';
 import { apiClient } from '../api/client';
-import { Upload, Play, CheckCircle, FileText, Mail } from 'lucide-react';
+import { Upload, Play, CheckCircle, FileText, Mail, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AuditLog } from '../components/AuditLog';
 import { CandidateDetail } from '../components/CandidateDetail';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export const Workspace: React.FC = () => {
   const navigate = useNavigate();
@@ -46,7 +51,7 @@ export const Workspace: React.FC = () => {
       const result = await apiClient.runAnalysis(jobProfile.rawText, candidates);
       setAnalysisResult(result);
       addAuditLogEntry('LLM Intelligence', 'Analyse abgeschlossen', `Matching für alle Kandidaten beendet (Dauer: ${result.duration_seconds?.toFixed(2)}s).`);
-      setActiveTab(3); // Jump to candidates tab
+      setActiveTab(3);
     } catch (e: any) {
       addAuditLogEntry('System', 'Fehler', `Fehler beim Abgleich: ${e.message}`);
       console.error(e);
@@ -83,282 +88,328 @@ export const Workspace: React.FC = () => {
     { id: 6, label: '⑥ Audit Log' },
   ];
 
+  const TabContent = motion.div;
+
   return (
     <>
-      <div className="block-container" style={{ padding: '0 20px', maxWidth: '1180px', margin: '0 auto', paddingTop: '.7rem', paddingBottom: '4rem' }}>
+      <div className="w-full relative bg-slate-50 min-h-screen pt-4 pb-20">
         
-        {/* Spline graphic as a header background */}
-        <div style={{ position: 'relative', width: '100vw', marginLeft: 'calc(50% - 50vw)', height: '300px', background: 'transparent', overflow: 'hidden', WebkitMaskImage: 'linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 7%, #000 93%, transparent 100%)', WebkitMaskComposite: 'source-in' }}>
+        {/* Spline Background Area */}
+        <div className="absolute top-0 left-0 right-0 h-[300px] pointer-events-none z-0" style={{
+          WebkitMaskImage: 'linear-gradient(180deg, black 0%, black 22%, black 78%, transparent 100%)'
+        }}>
           {/* @ts-ignore */}
-          <spline-viewer url="https://prod.spline.design/4PF4J4YenOXJHe4A/scene.splinecode" style={{ position: 'absolute', top: '50%', left: '50%', width: '100%', height: '100%', transform: 'translate(-50%,-50%) scale(1.1)', transformOrigin: 'center center' }}></spline-viewer>
+          <spline-viewer url="https://prod.spline.design/4PF4J4YenOXJHe4A/scene.splinecode" style={{ position: 'absolute', top: '50%', left: '50%', width: '100%', height: '100%', transform: 'translate(-50%,-50%) scale(1.1)' }}></spline-viewer>
         </div>
 
-        <div className="ws-head">
-          <div className="ws-copy section">
-            <span className="eyebrow">Recruiting Workspace</span>
-            <h2 style={{ fontSize: 'clamp(1.7rem,3.4vw,2.6rem)' }}>Dein Screening-Arbeitsbereich</h2>
-            <p className="lead" style={{ marginBottom: '30px' }}>
+        <div className="max-w-6xl mx-auto px-6 relative z-10">
+          <div className="pt-24 pb-12">
+            <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4 drop-shadow-sm">Recruiting Workspace</div>
+            <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-4 drop-shadow-sm">Dein Screening-Arbeitsbereich</h2>
+            <p className="text-xl text-slate-700 max-w-2xl leading-relaxed drop-shadow-md">
               Stellenprofil definieren, Bewerbungen analysieren und Ergebnisse transparent prüfen — die Entscheidung bleibt bei dir.
             </p>
           </div>
-        </div>
 
-        {activeBackend === 'Rule-Based Sandbox' && (
-          <div className="hitl" style={{ marginBottom: '30px' }}>
-            ⚠️ <b>Kein LLM aktiv:</b> Die Agenten laufen im regelbasierten Sandbox-Modus. Für vollständige Analysen bitte den Backend auf "LLM Intelligence" umstellen (sofern API-Key vorhanden).
+          {activeBackend === 'Rule-Based Sandbox' && (
+            <div className="bg-amber-50/80 backdrop-blur border border-amber-200 text-amber-900 px-6 py-4 rounded-2xl mb-8 shadow-sm flex items-center gap-3">
+              <span className="text-xl">⚠️</span>
+              <p className="text-sm font-medium">
+                <b className="font-bold">Kein LLM aktiv:</b> Die Agenten laufen im regelbasierten Sandbox-Modus. Für vollständige Analysen bitte den Backend auf "LLM Intelligence" umstellen.
+              </p>
+            </div>
+          )}
+
+          {/* Navigation Tabs */}
+          <div className="flex overflow-x-auto border-b border-slate-200 mb-8 hide-scrollbar">
+            {tabs.map(tab => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "px-6 py-4 text-[15px] font-semibold whitespace-nowrap transition-all border-b-2 -mb-[1px]",
+                  activeTab === tab.id 
+                    ? "border-indigo-600 text-indigo-700" 
+                    : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Horizontal Streamlit-style Tabs */}
-        <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid rgba(124,92,255,.15)', marginBottom: '30px', paddingBottom: '1px' }}>
-          {tabs.map(tab => (
-            <button 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '12px 24px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: activeTab === tab.id ? '2px solid var(--rai-purple)' : '2px solid transparent',
-                color: activeTab === tab.id ? 'var(--rai-ink)' : 'var(--rai-muted)',
-                fontWeight: activeTab === tab.id ? 600 : 500,
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s',
-                marginBottom: '-1px', // pull down to overlap the container's border
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ minHeight: '600px' }}>
-          
-          {activeTab === 1 && (
-            <div>
-              <div className="section" style={{ marginTop: 0 }}>
-                <h2>Stellenprofil definieren</h2>
-                <p className="lead">Füge die Anforderungen der Stelle ein, um sie von der KI strukturieren zu lassen.</p>
-              </div>
-              <textarea 
-                value={jobProfile.rawText}
-                onChange={e => setJobProfileText(e.target.value)}
-                placeholder="Fügen Sie hier die Stellenbeschreibung ein..."
-                style={{ width: '100%', height: '250px', padding: '16px', borderRadius: '12px', border: '1px solid rgba(124,92,255,.2)', marginBottom: '20px', fontFamily: 'inherit', resize: 'vertical' }}
-              />
-              <div className="stButton">
-                <button data-kind="primary" onClick={handleParseJob} style={{ cursor: 'pointer', background: 'linear-gradient(135deg,var(--rai-purple),var(--rai-blue))', color: '#fff', border: 'none', boxShadow: '0 12px 30px rgba(124,92,255,.40)' }}>
-                  ✨ Profil analysieren
-                </button>
-              </div>
-
-              {jobProfile.parsedProfile && (
-                <div style={{ marginTop: '40px' }}>
-                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--rai-ink)' }}>
-                    <CheckCircle size={22} color="var(--rai-purple)" /> Extrahierte Anforderungen
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
-                    {jobProfile.parsedProfile.requirements?.map((req: any, i: number) => (
-                      <div key={i} className="cand" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>
-                          <b>{req.category}:</b> {req.description}
-                        </span>
-                        <span className={`pill ${req.is_must_have ? 'pill-open' : 'pill-ok'}`}>
-                          {req.is_must_have ? 'Muss' : 'Kann'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 2 && (
-            <div>
-              <div className="section" style={{ marginTop: 0 }}>
-                <h2>Bewerbungen hochladen</h2>
-                <p className="lead">Lade Lebensläufe hoch, um sie gegen das Profil zu prüfen.</p>
-              </div>
-              
-              <div style={{ padding: '50px', border: '2px dashed rgba(124,92,255,.3)', borderRadius: '16px', textAlign: 'center', marginBottom: '40px', background: 'rgba(255,255,255,.5)' }}>
-                <Upload size={36} color="var(--rai-purple)" style={{ marginBottom: '16px' }} />
-                <p style={{ fontWeight: 600, color: 'var(--rai-ink)', fontSize: '1.15rem', marginBottom: '8px' }}>Ziehe Textdateien hierher (.txt)</p>
-                <p style={{ color: 'var(--rai-muted)', fontSize: '0.95rem', marginBottom: '24px' }}>oder wähle sie manuell aus deinem Dateisystem</p>
-                <label style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 28px', 
-                  background: 'linear-gradient(135deg,var(--rai-purple),var(--rai-blue))', 
-                  color: 'white', 
-                  borderRadius: '999px', 
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  boxShadow: '0 8px 24px rgba(124,92,255,.3)',
-                  transition: 'all 0.2s'
-                }} className="hover-lift">
-                  Dateien durchsuchen...
-                  <input type="file" multiple onChange={handleFileUpload} accept=".txt" style={{ display: 'none' }} />
-                </label>
-              </div>
-
-              {candidates.length > 0 && (
-                <div>
-                  <h3 style={{ marginBottom: '20px' }}>Aktuelle Kandidaten ({candidates.length})</h3>
-                  <div className="grid grid-2">
-                    {candidates.map((c, i) => (
-                      <div key={i} className="cand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <FileText size={24} color="var(--rai-blue)" />
-                        <strong style={{ fontSize: '1.05rem', color: 'var(--rai-ink)' }}>{c.filename}</strong>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="stButton" style={{ marginTop: '40px' }}>
-                    <button 
-                      data-kind="primary"
-                      onClick={handleRunAnalysis}
-                      disabled={isAnalyzing}
-                      style={{ cursor: isAnalyzing ? 'not-allowed' : 'pointer', opacity: isAnalyzing ? 0.7 : 1, background: 'linear-gradient(135deg,var(--rai-purple),var(--rai-blue))', color: '#fff', border: 'none', boxShadow: '0 12px 30px rgba(124,92,255,.40)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      <Play size={18} /> 
-                      {isAnalyzing ? 'Analysiere...' : 'Gesamtanalyse starten'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 3 && (
-            <div>
-              <div className="section" style={{ marginTop: 0 }}>
-                <h2>Kandidaten-Ranking</h2>
-                <p className="lead">Übersicht der Matching-Ergebnisse für alle Bewerber.</p>
-              </div>
-
-              {!analysisResult && !isAnalyzing && <div className="hitl">Noch keine Analyse durchgeführt. (Gehe zu ② Bewerbungen)</div>}
-              {isAnalyzing && <div className="hitl">⏳ Die Agenten arbeiten im Hintergrund...</div>}
-              
-              {analysisResult && (
-                <div className="grid grid-2">
-                  {analysisResult.candidate_results.map((res: any, i: number) => (
-                    <div key={i} className="card">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                        <h3>{res.filename}</h3>
-                        <span className={`pill ${res.decision.is_match ? 'pill-ok' : 'pill-no'}`}>
-                          {res.decision.is_match ? 'Match' : 'Kein Match'}
-                        </span>
-                      </div>
-                      <p style={{ marginBottom: '20px', minHeight: '60px' }}>{res.decision.reasoning}</p>
-                      
-                      <div className="stButton">
-                        <button onClick={() => setSelectedCandidateId(res.filename)} style={{ width: '100%', cursor: 'pointer' }}>
-                          Profil ansehen →
-                        </button>
-                      </div>
+          <div className="min-h-[600px]">
+            <AnimatePresence mode="wait">
+              <TabContent 
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {/* TAB 1 */}
+                {activeTab === 1 && (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-bold text-slate-900 mb-2">Stellenprofil definieren</h2>
+                      <p className="text-slate-600">Füge die Anforderungen der Stelle ein, um sie von der KI strukturieren zu lassen.</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    <textarea 
+                      value={jobProfile.rawText}
+                      onChange={e => setJobProfileText(e.target.value)}
+                      placeholder="Fügen Sie hier die Stellenbeschreibung ein..."
+                      className="w-full h-64 p-5 rounded-2xl border border-slate-200 bg-white/80 backdrop-blur shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-y mb-6 font-medium text-slate-700"
+                    />
+                    <Button onClick={handleParseJob} size="lg" className="rounded-xl px-8 shadow-lg shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-base border-0">
+                      ✨ Profil analysieren
+                    </Button>
 
-          {activeTab === 4 && (
-            <div>
-              <div className="section" style={{ marginTop: 0 }}>
-                <h2>Informationslücken</h2>
-                <p className="lead">Fehlende Informationen aus den Lebensläufen, die für das Matching relevant sind.</p>
-              </div>
-              
-              {!analysisResult && <div className="hitl">Noch keine Analyse durchgeführt.</div>}
-              
-              {analysisResult && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {analysisResult.candidate_results.map((res: any, i: number) => {
-                    const gaps = res.gaps || [];
-                    if (gaps.length === 0) return null;
-                    
-                    return (
-                      <div key={i} className="cand" style={{ padding: '20px' }}>
-                        <h3 style={{ margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          👤 {res.filename}
+                    {jobProfile.parsedProfile && (
+                      <div className="mt-12 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-900 mb-6">
+                          <CheckCircle className="text-emerald-500" size={24} /> Extrahierte Anforderungen
                         </h3>
-                        <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--rai-ink)' }}>
-                          {gaps.map((g: any, j: number) => (
-                            <li key={j} style={{ marginBottom: '8px' }}>
-                              <b>{g.requirement}:</b> {g.description}
-                            </li>
+                        <div className="flex flex-col gap-3">
+                          {jobProfile.parsedProfile.requirements?.map((req: any, i: number) => (
+                            <Card key={i} className="bg-white border-slate-200/60 shadow-sm rounded-xl">
+                              <CardContent className="p-5 flex justify-between items-center gap-4">
+                                <div className="text-slate-700">
+                                  <strong className="text-slate-900 font-bold">{req.category}:</strong> {req.description}
+                                </div>
+                                <Badge className={cn("px-3 py-1 font-bold rounded-lg whitespace-nowrap shadow-none", req.is_must_have ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-100" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-100")}>
+                                  {req.is_must_have ? 'Muss' : 'Kann'}
+                                </Badge>
+                              </CardContent>
+                            </Card>
                           ))}
-                        </ul>
+                        </div>
                       </div>
-                    );
-                  })}
-                  {analysisResult.candidate_results.every((r: any) => !r.gaps || r.gaps.length === 0) && (
-                    <div className="hitl">Keine Informationslücken gefunden!</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    )}
+                  </div>
+                )}
 
-          {activeTab === 5 && (
-            <div>
-              <div className="section" style={{ marginTop: 0 }}>
-                <h2>Rückfragen & E-Mails</h2>
-                <p className="lead">Vorgeschlagene Fragen und automatisch generierte E-Mail-Entwürfe.</p>
-              </div>
-
-              {!analysisResult && <div className="hitl">Noch keine Analyse durchgeführt.</div>}
-
-              {analysisResult && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  {analysisResult.candidate_results.map((res: any, i: number) => (
-                    <div key={i} className="cand" style={{ padding: '24px' }}>
-                      <h3 style={{ margin: '0 0 16px 0' }}>👤 {res.filename}</h3>
-                      
-                      {(res.questions && res.questions.length > 0) && (
-                        <div style={{ marginBottom: '20px' }}>
-                          <b style={{ color: 'var(--rai-purple)' }}>Vorgeschlagene Fragen:</b>
-                          <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
-                            {res.questions.map((q: string, j: number) => <li key={j}>{q}</li>)}
-                          </ul>
-                        </div>
-                      )}
-
-                      {res.email_draft && (
-                        <div style={{ background: 'rgba(255,255,255,.5)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(124,92,255,.1)' }}>
-                          <h4 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Mail size={16} /> Entwurf (Vorschau)
-                          </h4>
-                          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, color: 'var(--rai-muted)', fontSize: '0.95rem' }}>
-                            {res.email_draft}
-                          </pre>
-                          
-                          <a 
-                            href={`mailto:?subject=Rückfrage zu Ihrer Bewerbung&body=${encodeURIComponent(res.email_draft)}`}
-                            className="navbtn"
-                            style={{
-                              display: 'inline-block', marginTop: '16px', background: 'var(--rai-ink)', color: '#fff',
-                              padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontWeight: 600
-                            }}
-                          >
-                            📧 In E-Mail-Programm öffnen
-                          </a>
-                        </div>
-                      )}
+                {/* TAB 2 */}
+                {activeTab === 2 && (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-bold text-slate-900 mb-2">Bewerbungen hochladen</h2>
+                      <p className="text-slate-600">Lade Lebensläufe hoch, um sie gegen das Profil zu prüfen.</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    
+                    <div className="border-2 border-dashed border-indigo-200/80 rounded-3xl p-12 text-center mb-10 bg-white/40 backdrop-blur">
+                      <div className="w-16 h-16 mx-auto bg-indigo-50 rounded-2xl flex items-center justify-center mb-6">
+                        <Upload size={32} className="text-indigo-600" />
+                      </div>
+                      <p className="text-xl font-bold text-slate-900 mb-2">Ziehe Textdateien hierher (.txt)</p>
+                      <p className="text-slate-500 font-medium mb-8">oder wähle sie manuell aus deinem Dateisystem</p>
+                      <label className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform text-white rounded-full cursor-pointer font-bold shadow-xl shadow-indigo-200">
+                        Dateien durchsuchen...
+                        <input type="file" multiple onChange={handleFileUpload} accept=".txt" className="hidden" />
+                      </label>
+                    </div>
 
-          {activeTab === 6 && <AuditLog />}
+                    {candidates.length > 0 && (
+                      <div className="animate-in slide-in-from-bottom-4 fade-in duration-500">
+                        <h3 className="text-xl font-bold text-slate-900 mb-4">Aktuelle Kandidaten ({candidates.length})</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                          {candidates.map((c, i) => (
+                            <Card key={i} className="bg-white border-slate-200/60 shadow-sm rounded-xl hover:-translate-y-1 transition-transform">
+                              <CardContent className="p-4 flex items-center gap-3">
+                                <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                                  <FileText size={20} />
+                                </div>
+                                <strong className="text-slate-900 font-semibold truncate">{c.filename}</strong>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                        
+                        <Button 
+                          onClick={handleRunAnalysis}
+                          disabled={isAnalyzing}
+                          size="lg"
+                          className="rounded-xl px-8 shadow-lg shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-base border-0 flex items-center gap-2"
+                        >
+                          <Play size={18} fill="currentColor" /> 
+                          {isAnalyzing ? 'Analysiere...' : 'Gesamtanalyse starten'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
+                {/* TAB 3 */}
+                {activeTab === 3 && (
+                  <div className="max-w-6xl mx-auto">
+                    <div className="mb-8">
+                      <h2 className="text-2xl font-bold text-slate-900 mb-2">Kandidaten-Ranking</h2>
+                      <p className="text-slate-600">Übersicht der Matching-Ergebnisse für alle Bewerber.</p>
+                    </div>
+
+                    {!analysisResult && !isAnalyzing && (
+                      <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-6 text-amber-800 font-medium">
+                        Noch keine Analyse durchgeführt. (Gehe zu ② Bewerbungen)
+                      </div>
+                    )}
+                    
+                    {isAnalyzing && (
+                      <div className="bg-blue-50/80 border border-blue-100 rounded-2xl p-6 text-blue-800 font-bold flex items-center gap-3 animate-pulse">
+                        <span className="animate-spin text-xl">⏳</span> Die Agenten arbeiten im Hintergrund...
+                      </div>
+                    )}
+                    
+                    {analysisResult && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {analysisResult.candidate_results.map((res: any, i: number) => (
+                          <Card key={i} className="bg-white/80 backdrop-blur border-slate-200/60 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all rounded-2xl flex flex-col">
+                            <CardContent className="p-6 flex-1 flex flex-col">
+                              <div className="flex justify-between items-start mb-4">
+                                <h3 className="font-bold text-lg text-slate-900 truncate max-w-[70%]">{res.filename}</h3>
+                                <Badge className={cn("px-2 py-0.5 rounded-md shadow-none font-bold", res.decision.is_match ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-red-100 text-red-800 hover:bg-red-100")}>
+                                  {res.decision.is_match ? 'Match' : 'Kein Match'}
+                                </Badge>
+                              </div>
+                              <p className="text-slate-600 text-sm leading-relaxed mb-6 flex-1 line-clamp-4">
+                                {res.decision.reasoning}
+                              </p>
+                              
+                              <Button 
+                                variant="outline" 
+                                onClick={() => setSelectedCandidateId(res.filename)} 
+                                className="w-full mt-auto rounded-xl border-slate-200 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-bold flex items-center justify-center gap-1"
+                              >
+                                Profil ansehen <ChevronRight size={16} />
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 4 */}
+                {activeTab === 4 && (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="mb-8">
+                      <h2 className="text-2xl font-bold text-slate-900 mb-2">Informationslücken</h2>
+                      <p className="text-slate-600">Fehlende Informationen aus den Lebensläufen, die für das Matching relevant sind.</p>
+                    </div>
+                    
+                    {!analysisResult && (
+                      <div className="bg-slate-100/50 border border-slate-200 rounded-2xl p-6 text-slate-500 font-medium text-center">
+                        Noch keine Analyse durchgeführt.
+                      </div>
+                    )}
+                    
+                    {analysisResult && (
+                      <div className="flex flex-col gap-6">
+                        {analysisResult.candidate_results.map((res: any, i: number) => {
+                          const gaps = res.gaps || [];
+                          if (gaps.length === 0) return null;
+                          
+                          return (
+                            <Card key={i} className="bg-white shadow-sm border-slate-200/60 rounded-2xl overflow-hidden">
+                              <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center gap-2">
+                                <span className="text-xl">👤</span>
+                                <h3 className="font-bold text-slate-900">{res.filename}</h3>
+                              </div>
+                              <CardContent className="p-6">
+                                <ul className="space-y-4">
+                                  {gaps.map((g: any, j: number) => (
+                                    <li key={j} className="flex gap-3">
+                                      <span className="text-amber-500 mt-1 font-black">•</span>
+                                      <div>
+                                        <div className="font-bold text-slate-900">{g.requirement}</div>
+                                        <div className="text-slate-600 text-sm mt-1">{g.description}</div>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                        {analysisResult.candidate_results.every((r: any) => !r.gaps || r.gaps.length === 0) && (
+                          <div className="bg-emerald-50/80 border border-emerald-100 rounded-2xl p-6 text-emerald-800 font-bold text-center">
+                            🎉 Keine Informationslücken gefunden!
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 5 */}
+                {activeTab === 5 && (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="mb-8">
+                      <h2 className="text-2xl font-bold text-slate-900 mb-2">Rückfragen & E-Mails</h2>
+                      <p className="text-slate-600">Vorgeschlagene Fragen und automatisch generierte E-Mail-Entwürfe.</p>
+                    </div>
+
+                    {!analysisResult && (
+                      <div className="bg-slate-100/50 border border-slate-200 rounded-2xl p-6 text-slate-500 font-medium text-center">
+                        Noch keine Analyse durchgeführt.
+                      </div>
+                    )}
+
+                    {analysisResult && (
+                      <div className="flex flex-col gap-8">
+                        {analysisResult.candidate_results.map((res: any, i: number) => (
+                          <Card key={i} className="bg-white shadow-md border-slate-200/60 rounded-2xl overflow-hidden">
+                            <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center gap-2">
+                              <span className="text-xl">👤</span>
+                              <h3 className="font-bold text-slate-900 text-lg">{res.filename}</h3>
+                            </div>
+                            
+                            <CardContent className="p-6">
+                              {(res.questions && res.questions.length > 0) && (
+                                <div className="mb-8">
+                                  <h4 className="font-bold text-indigo-700 uppercase tracking-wider text-xs mb-3">Vorgeschlagene Fragen</h4>
+                                  <ul className="space-y-2">
+                                    {res.questions.map((q: string, j: number) => (
+                                      <li key={j} className="flex gap-2 text-slate-700 font-medium">
+                                        <span className="text-indigo-400 font-bold">•</span>
+                                        {q}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {res.email_draft && (
+                                <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
+                                  <h4 className="flex items-center gap-2 font-bold text-slate-900 mb-4">
+                                    <Mail className="text-slate-400" size={18} /> Entwurf (Vorschau)
+                                  </h4>
+                                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-600 leading-relaxed mb-6 bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                                    {res.email_draft}
+                                  </pre>
+                                  
+                                  <Button 
+                                    asChild
+                                    className="rounded-xl shadow-md bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                                  >
+                                    <a href={`mailto:?subject=Rückfrage zu Ihrer Bewerbung&body=${encodeURIComponent(res.email_draft)}`}>
+                                      📧 In E-Mail-Programm öffnen
+                                    </a>
+                                  </Button>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 6 */}
+                {activeTab === 6 && <AuditLog />}
+              </TabContent>
+            </AnimatePresence>
+          </div>
         </div>
       </div>
       <CandidateDetail />

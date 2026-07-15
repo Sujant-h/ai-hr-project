@@ -2,6 +2,11 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionStore } from '../store/session';
 import { Intro } from '../components/Intro';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 const _HF = "https://d8j0ntlcm91z4.cloudfront.net/user_33IJIDZ0cOmwdzXkCP5nbQryjVC/";
 const IMG_ORB = _HF + "hf_20260618_184056_8486b8b4-b288-4344-996a-53ea801af5bc.png";
@@ -11,6 +16,17 @@ const IMG_STEP_UPLOAD = _HF + "hf_20260619_105340_e82eb3e8-ca18-4a12-a2a4-0a17fa
 const IMG_STEP_ANALYZE = _HF + "hf_20260619_105345_3d63247e-224a-4452-9886-fc6bafea6e9c.png";
 const IMG_STEP_DECIDE = _HF + "hf_20260619_105350_b7e7816d-3170-4cfb-9f07-be85ce02fce0.png";
 const IMG_HERO = _HF + "hf_20260621_115229_842ad9a6-e33f-449f-9f24-0875dee50874.png";
+
+const FadeIn = ({ children, delay = 0 }: { children: React.ReactNode, delay?: number }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 30 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true, margin: "-100px" }}
+    transition={{ duration: 0.7, delay, ease: [0.2, 0.8, 0.2, 1] }}
+  >
+    {children}
+  </motion.div>
+);
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -23,220 +39,211 @@ export const Home: React.FC = () => {
   return (
     <>
       <Intro />
-      <div style={{ opacity: hasSeenIntro ? 1 : 0, transition: 'opacity 0.8s ease' }}>
-        
+      <div 
+        className="w-full relative bg-slate-50 overflow-x-hidden pb-20"
+        style={{ opacity: hasSeenIntro ? 1 : 0, transition: 'opacity 0.8s ease' }}
+      >
+        {/* Background gradient */}
+        <div className="fixed inset-0 pointer-events-none" style={{
+          background: 'radial-gradient(1300px 780px at 80% 4%, rgba(124,92,255,.15), transparent 58%), radial-gradient(1150px 700px at 104% -2%, rgba(59,130,246,.12), transparent 56%), radial-gradient(1000px 700px at -6% 2%, rgba(124,92,255,.08), transparent 60%)'
+        }}></div>
+
         {/* 1) Hero */}
-        <div className="vhero reveal reveal-in">
-          <img className="vhero-bg" src={IMG_HERO} alt="" />
-          <div className="vhero-scrim"></div>
-          <div className="vhero-copy">
-            <div className="kicker">Recruiting AI · Multi-Agent HR</div>
-            <h1 className="display">Bewerbungen verstehen.<br /><span className="g">Menschen entscheiden.</span></h1>
-            <p className="big">
-              Sechs spezialisierte KI-Agenten lesen Stellenprofile und Lebensläufe, 
-              prüfen Anforderungen und decken Informationslücken auf — die Entscheidung bleibt bei dir.
-            </p>
+        <div className="relative w-full h-[100vh] min-h-[640px] -mt-4">
+          <div className="absolute inset-0 z-0">
+            <img src={IMG_HERO} alt="Hero Background" className="w-full h-full object-cover opacity-90 [mask-image:linear-gradient(to_bottom,black_40%,transparent_90%)]" />
           </div>
-        </div>
-        
-        <div data-testid="stHorizontalBlock" style={{ marginTop: '-19vh', position: 'relative', zIndex: 3, display: 'flex', justifyContent: 'center' }}>
-          <span className="cta-lift"></span>
-          <div className="stButton">
-            <button kind="primary" onClick={handleStartDemo} style={{ padding: '14px 32px', fontSize: '1.1rem' }}>
-              🚀 Demo starten
-            </button>
+          <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-50/80 to-transparent"></div>
+          
+          <div className="absolute top-1/2 left-[5%] md:left-[10%] xl:left-[calc(50vw-530px)] -translate-y-1/2 max-w-xl z-20 px-4">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">
+                Recruiting AI · Multi-Agent HR
+              </div>
+              <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tight leading-[1.05] mb-6">
+                Bewerbungen verstehen.<br/>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500">
+                  Menschen entscheiden.
+                </span>
+              </h1>
+              <p className="text-lg md:text-xl text-slate-600 leading-relaxed max-w-lg mb-8">
+                Sechs spezialisierte KI-Agenten lesen Stellenprofile und Lebensläufe, 
+                prüfen Anforderungen und decken Informationslücken auf — die Entscheidung bleibt bei dir.
+              </p>
+              <Button size="lg" onClick={handleStartDemo} className="rounded-full px-8 py-6 text-lg font-bold shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform border-0 text-white">
+                🚀 Demo starten
+              </Button>
+            </motion.div>
           </div>
         </div>
 
-        <div style={{ position: 'relative', width: '100%', height: '420px', background: 'transparent', overflow: 'hidden', WebkitMaskImage: 'linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 7%, #000 93%, transparent 100%)', WebkitMaskComposite: 'source-in' }}>
+        {/* Spline */}
+        <div className="relative w-full h-[420px] -mt-[15vh] z-30 pointer-events-none" style={{
+          WebkitMaskImage: 'linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%)'
+        }}>
           {/* @ts-ignore */}
-          <spline-viewer url="https://prod.spline.design/4PF4J4YenOXJHe4A/scene.splinecode" style={{ position: 'absolute', top: '50%', left: '50%', width: '100%', height: '100%', transform: 'translate(-50%,-50%) scale(1.1)', transformOrigin: 'center center' }}></spline-viewer>
+          <spline-viewer url="https://prod.spline.design/4PF4J4YenOXJHe4A/scene.splinecode" style={{ position: 'absolute', top: '50%', left: '50%', width: '100%', height: '100%', transform: 'translate(-50%,-50%) scale(1.1)' }}></spline-viewer>
         </div>
 
-        <div className="problem-wrap">
-          <div className="problem-copy story reveal reveal-in" id="problem" style={{ paddingBottom: 0, paddingTop: '54px' }}>
-            <div className="kicker">Das Problem</div>
-            <h2 className="display">5–10 Stunden<br /><span className="g">pro Stelle.</span></h2>
-            <p className="big">
-              Ohne eigene HR-Abteilung wird jede Ausschreibung zur Belastung: 
-              unterschiedliche CV-Formate, fehlende Angaben, keine nachvollziehbare Bewertung.
-            </p>
-          </div>
-        </div>
-
-        <div className="story reveal reveal-in" style={{ paddingTop: '20px' }}>
-          <div className="stats">
-            <div className="stat c1">
-              <div className="ic">⏱️</div>
-              <div className="n">5–10 h</div>
-              <div className="l">Sichtungsaufwand pro Stelle</div>
-            </div>
-            <div className="stat c2">
-              <div className="ic">🛡️</div>
-              <div className="n">100 %</div>
-              <div className="l">der Schritte im Audit Log</div>
-            </div>
-            <div className="stat c3">
-              <div className="ic">⚖️</div>
-              <div className="n">0</div>
-              <div className="l">automatische Entscheidungen</div>
-            </div>
-          </div>
-        </div>
-
-        {/* 3) Lösung */}
-        <div className="story reveal reveal-in" id="loesung">
-          <div className="split rev">
-            <div className="media-wrap">
-              <img src={IMG_ORB} alt="Recruiting AI" />
-            </div>
-            <div>
-              <div className="kicker">Die Lösung</div>
-              <h2 className="display">Ein Agenten-<br /><span className="g">team</span>, ein Flow.</h2>
-              <p className="big">
-                Vom Stellenprofil bis zur Rückfrage: jeder Agent hat genau eine Aufgabe — 
-                transparent, überprüfbar, nachvollziehbar.
+        <div className="max-w-6xl mx-auto px-6 relative z-40">
+          
+          {/* Problem */}
+          <FadeIn>
+            <div id="problem" className="pt-24 pb-16">
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Das Problem</div>
+              <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight mb-6">
+                5–10 Stunden<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">pro Stelle.</span>
+              </h2>
+              <p className="text-xl text-slate-600 max-w-2xl leading-relaxed">
+                Ohne eigene HR-Abteilung wird jede Ausschreibung zur Belastung: 
+                unterschiedliche CV-Formate, fehlende Angaben, keine nachvollziehbare Bewertung.
               </p>
             </div>
-          </div>
+          </FadeIn>
+
+          <FadeIn delay={0.2}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-32">
+              {[
+                { icon: '⏱️', val: '5–10 h', desc: 'Sichtungsaufwand pro Stelle' },
+                { icon: '🛡️', val: '100 %', desc: 'der Schritte im Audit Log' },
+                { icon: '⚖️', val: '0', desc: 'automatische Entscheidungen' }
+              ].map((s, i) => (
+                <Card key={i} className="bg-white/60 backdrop-blur-md border-slate-200/60 shadow-xl shadow-slate-200/40 hover:-translate-y-2 transition-transform duration-300">
+                  <CardContent className="p-8 text-center flex flex-col items-center">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white flex items-center justify-center text-2xl mb-4 shadow-lg shadow-indigo-200">
+                      {s.icon}
+                    </div>
+                    <div className="text-4xl font-black text-slate-900 mb-2">{s.val}</div>
+                    <div className="text-slate-500 font-medium">{s.desc}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </FadeIn>
+
+          {/* Solution */}
+          <FadeIn>
+            <div id="loesung" className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
+              <div className="order-2 md:order-1 rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
+                <img src={IMG_ORB} alt="Solution" className="w-full h-auto rounded-2xl" />
+              </div>
+              <div className="order-1 md:order-2">
+                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Die Lösung</div>
+                <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">
+                  Ein Agenten-<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">team</span>, ein Flow.
+                </h2>
+                <p className="text-xl text-slate-600 leading-relaxed">
+                  Vom Stellenprofil bis zur Rückfrage: jeder Agent hat genau eine Aufgabe — 
+                  transparent, überprüfbar, nachvollziehbar.
+                </p>
+              </div>
+            </div>
+          </FadeIn>
+
+          {/* Steps Detail */}
+          <FadeIn>
+            <div id="schritte" className="mb-12">
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Im Detail</div>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">Drei Schritte. <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">Ein Flow.</span></h2>
+            </div>
+          </FadeIn>
         </div>
 
-        <div className="story reveal reveal-in" style={{ paddingTop: '24px' }}>
-          <div className="steps">
-            <div className="stepcard">
-              <div className="k">SCHRITT 01</div>
-              <h3>Stelle & Bewerbungen</h3>
-              <p>Stellenprofil einfügen, Lebensläufe als PDF oder Text hochladen.</p>
-            </div>
-            <div className="stepcard">
-              <div className="k">SCHRITT 02</div>
-              <h3>Analyse & Abgleich</h3>
-              <p>Der CV-Agent strukturiert die Daten, der Matching-Agent prüft jede Anforderung.</p>
-            </div>
-            <div className="stepcard">
-              <div className="k">SCHRITT 03</div>
-              <h3>Lücken & Rückfragen</h3>
-              <p>Fehlende Angaben werden sichtbar — höfliche Rückfragen entstehen automatisch.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 3b) Horizontal scroll gallery */}
-        <div className="story reveal reveal-in" id="schritte" style={{ paddingBottom: '8px' }}>
-          <div className="kicker">Im Detail</div>
-          <h2 className="display">Drei Schritte. <span className="g">Ein Flow.</span></h2>
-          <p className="big">Scrolle horizontal durch den Ablauf.</p>
-        </div>
-
-        <div className="bleed galfade reveal reveal-in">
-          <div className="hscroll">
-            <div className="hcard">
-              <img src={IMG_STEP_UPLOAD} alt="Hochladen" loading="lazy" />
-              <div className="cap"><div className="k">SCHRITT 01</div><h4>Hochladen</h4><p>Stelle & Lebensläufe rein — als PDF oder Text.</p></div>
-            </div>
-            <div className="hcard">
-              <img src={IMG_STEP_ANALYZE} alt="Analysieren" loading="lazy" />
-              <div className="cap"><div className="k">SCHRITT 02</div><h4>Analysieren</h4><p>CV-Agent strukturiert, Matching-Agent prüft jede Anforderung.</p></div>
-            </div>
-            <div className="hcard">
-              <img src={IMG_STEP_DECIDE} alt="Entscheiden" loading="lazy" />
-              <div className="cap"><div className="k">SCHRITT 03</div><h4>Entscheiden</h4><p>Der Mensch wählt — nie der Algorithmus.</p></div>
-            </div>
-            <div className="hcard">
-              <img src={IMG_ORB} alt="Multi-Agent" loading="lazy" />
-              <div className="cap"><div className="k">SYSTEM</div><h4>Multi-Agent</h4><p>Sechs Agenten, ein sauberer, nachvollziehbarer Flow.</p></div>
-            </div>
-            <div className="hcard">
-              <img src={IMG_WAVE} alt="Audit Log" loading="lazy" />
-              <div className="cap"><div className="k">TRANSPARENZ</div><h4>Audit Log</h4><p>Jeder Verarbeitungsschritt lückenlos dokumentiert.</p></div>
-            </div>
-          </div>
-        </div>
-
-        {/* 4) Demo CTA */}
-        <div className="story reveal reveal-in" style={{ textAlign: 'center' }}>
-          <div className="kicker" style={{ textAlign: 'center' }}>Live-Demo</div>
-          <h2 className="display">Probier es im Workspace.</h2>
-          <p className="big" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
-            Lade Demo-Daten oder deine eigenen Bewerbungen — analysieren, Kandidatenprofile öffnen, 
-            Rückfragen als E-Mail-Entwurf erstellen.
-          </p>
-          <div className="stButton" style={{ marginTop: '30px', display: 'flex', justifyContent: 'center' }}>
-            <button kind="primary" onClick={handleStartDemo} style={{ padding: '14px 32px', fontSize: '1.1rem' }}>
-              Workspace öffnen →
-            </button>
-          </div>
-        </div>
-
-        {/* 5) Ergebnisse */}
-        <div className="story reveal reveal-in">
-          <div className="split">
-            <div>
-              <div className="kicker">Ergebnisse</div>
-              <h2 className="display">Struktur statt<br /><span className="g">Bauchgefühl.</span></h2>
-              <p className="big">
-                Saubere Kandidatenprofile, eine transparente Qualifikationscheckliste und ein 
-                lückenloses Audit Log — Human-in-the-Loop by Design. Keine Rangfolge, keine Empfehlung.
-              </p>
-            </div>
-            <div className="media-wrap">
-              <img src={IMG_DATA} alt="Strukturierte Kandidatendaten" />
+        {/* Gallery */}
+        <FadeIn>
+          <div className="w-full relative mb-32">
+            <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none"></div>
+            <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none"></div>
+            
+            <div className="flex overflow-x-auto gap-6 px-12 md:px-32 pb-8 snap-x snap-mandatory hide-scrollbar">
+              {[
+                { img: IMG_STEP_UPLOAD, step: 'SCHRITT 01', title: 'Hochladen', desc: 'Stelle & Lebensläufe rein — als PDF oder Text.' },
+                { img: IMG_STEP_ANALYZE, step: 'SCHRITT 02', title: 'Analysieren', desc: 'CV-Agent strukturiert, Matching-Agent prüft jede Anforderung.' },
+                { img: IMG_STEP_DECIDE, step: 'SCHRITT 03', title: 'Entscheiden', desc: 'Der Mensch wählt — nie der Algorithmus.' },
+                { img: IMG_ORB, step: 'SYSTEM', title: 'Multi-Agent', desc: 'Sechs Agenten, ein sauberer, nachvollziehbarer Flow.' },
+                { img: IMG_WAVE, step: 'TRANSPARENZ', title: 'Audit Log', desc: 'Jeder Verarbeitungsschritt lückenlos dokumentiert.' },
+              ].map((item, i) => (
+                <Card key={i} className="flex-none w-[85vw] md:w-[400px] snap-center overflow-hidden border-slate-200/60 shadow-xl bg-white hover:-translate-y-2 transition-all">
+                  <div className="h-64 bg-slate-100 overflow-hidden">
+                    <img src={item.img} className="w-full h-full object-cover" alt={item.title} />
+                  </div>
+                  <CardContent className="p-6">
+                    <div className="text-xs font-extrabold tracking-wider text-blue-600 mb-2">{item.step}</div>
+                    <h4 className="text-xl font-bold text-slate-900 mb-2">{item.title}</h4>
+                    <p className="text-slate-600 font-medium">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
-        </div>
+        </FadeIn>
 
-        {/* 6) Pricing */}
-        <div className="story reveal reveal-in" id="preise" style={{ textAlign: 'center' }}>
-          <div className="kicker" style={{ textAlign: 'center' }}>Preise</div>
-          <h2 className="display">Einfach. Planbar.</h2>
-        </div>
-        
-        <div className="story reveal reveal-in" style={{ paddingTop: '16px' }}>
-          <div className="pricing">
-            <div className="price p1">
-              <div className="pn">Starter</div>
-              <div className="pp">0€<small> / Demo</small></div>
-              <ul>
-                <li>Vollständiger Workspace</li>
-                <li>Bis zu 5 Bewerbungen</li>
-                <li>Audit Log</li>
-              </ul>
+        <div className="max-w-6xl mx-auto px-6">
+          {/* Results */}
+          <FadeIn>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
+              <div>
+                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Ergebnisse</div>
+                <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">
+                  Struktur statt<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">Bauchgefühl.</span>
+                </h2>
+                <p className="text-xl text-slate-600 leading-relaxed mb-8">
+                  Saubere Kandidatenprofile, eine transparente Qualifikationscheckliste und ein 
+                  lückenloses Audit Log — Human-in-the-Loop by Design. Keine Rangfolge, keine Empfehlung.
+                </p>
+                <Button size="lg" onClick={handleStartDemo} className="rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border-0 shadow-sm">
+                  Workspace öffnen &rarr;
+                </Button>
+              </div>
+              <div className="rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
+                <img src={IMG_DATA} alt="Structured Data" className="w-full h-auto rounded-2xl" />
+              </div>
             </div>
-            <div className="price feat">
-              <div className="badge-pop">Beliebt</div>
-              <div className="pn">Team</div>
-              <div className="pp">49€<small> / Monat</small></div>
-              <ul>
-                <li>Unbegrenzte Bewerbungen</li>
-                <li>Alle sechs Agenten</li>
-                <li>Rückfragen-E-Mails</li>
-                <li>Priorisierter Support</li>
-              </ul>
-            </div>
-            <div className="price p3">
-              <div className="pn">Enterprise</div>
-              <div className="pp">Auf Anfrage</div>
-              <ul>
-                <li>SSO &amp; Rollen</li>
-                <li>Eigene Modelle / API</li>
-                <li>Audit-Export</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+          </FadeIn>
 
-        {/* Final CTA band */}
-        <div className="cta-band reveal reveal-in">
-          <h2 className="display" style={{ fontSize: 'clamp(2rem,4vw,3rem)' }}>Bereit für den ersten Screening-Lauf?</h2>
-          <p className="big" style={{ margin: '14px auto 0' }}>Starte in Sekunden — ganz ohne Setup.</p>
-          <div className="stButton" style={{ marginTop: '30px', display: 'flex', justifyContent: 'center' }}>
-            <button kind="primary" onClick={handleStartDemo} style={{ padding: '14px 32px', fontSize: '1.1rem' }}>
-              🚀 Demo starten
-            </button>
-          </div>
-        </div>
-        <div style={{ height: '60px' }}></div>
+          {/* Pricing */}
+          <FadeIn>
+            <div id="preise" className="text-center mb-12">
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Preise</div>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Einfach. Planbar.</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-32">
+              {[
+                { name: 'Starter', price: '0€', unit: '/ Demo', features: ['Vollständiger Workspace', 'Bis zu 5 Bewerbungen', 'Audit Log'] },
+                { name: 'Team', price: '49€', unit: '/ Monat', pop: true, features: ['Unbegrenzte Bewerbungen', 'Alle sechs Agenten', 'Rückfragen-E-Mails', 'Priorisierter Support'] },
+                { name: 'Enterprise', price: 'Auf Anfrage', unit: '', features: ['SSO & Rollen', 'Eigene Modelle / API', 'Audit-Export'] }
+              ].map((p, i) => (
+                <Card key={i} className={cn("relative overflow-hidden bg-white/60 backdrop-blur-md border-slate-200/60 shadow-lg hover:-translate-y-2 transition-transform duration-300", p.pop ? "border-indigo-300 shadow-xl shadow-indigo-100" : "")}>
+                  {p.pop && <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">Beliebt</div>}
+                  <CardContent className="p-8">
+                    <div className="text-lg font-bold text-slate-900 mb-2">{p.name}</div>
+                    <div className="text-4xl font-black text-slate-900 mb-6">{p.price}<span className="text-sm text-slate-500 font-semibold">{p.unit}</span></div>
+                    <ul className="space-y-3">
+                      {p.features.map((f, j) => (
+                        <li key={j} className="flex items-center text-slate-600 font-medium">
+                          <span className="text-emerald-500 mr-2 font-bold">✓</span> {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </FadeIn>
 
+          {/* Final CTA */}
+          <FadeIn>
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50/50 border border-indigo-100 p-12 md:p-20 text-center shadow-lg shadow-indigo-100/50">
+              <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">Bereit für den ersten Screening-Lauf?</h2>
+              <p className="text-xl text-slate-600 mb-10">Starte in Sekunden — ganz ohne Setup.</p>
+              <Button size="lg" onClick={handleStartDemo} className="rounded-full px-10 py-7 text-xl font-bold shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform border-0 text-white">
+                🚀 Demo starten
+              </Button>
+            </div>
+          </FadeIn>
+
+        </div>
       </div>
     </>
   );
