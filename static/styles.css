@@ -5,7 +5,13 @@
   --rai-blue:#3b82f6;
   --rai-cyan:#22d3ee;
   --rai-ink:#0f1226;
-  --rai-muted:#5b6178;
+  --rai-muted:#474d63;
+  /* Readable counterparts of the brand hues, for TEXT only. The bright brand
+     colors above are tuned for fills/glows and drop to 1.1:1–2.6:1 as type on
+     the pale hero and page gradients; these keep the same hue arc but clear
+     WCAG AA (>=4.5:1 body, >=3:1 large display). */
+  --rai-purple-text:#4c1d95;
+  --rai-grad-text:linear-gradient(120deg,#6d28d9,#4338ca,#0e7490);
 }
 
 html, body, [class*="css"], .stApp{
@@ -164,7 +170,7 @@ html, body{ overflow-x:clip; max-width:100%; }
 
 /* Raycast/Linear-style inline nav links, centered in the bar */
 .navlinks{ display:flex; align-items:center; justify-content:center; gap:4px;
-  flex-wrap:nowrap; transform:translateY(-2px); }
+  flex-wrap:nowrap; }
 .navlinks a{ color:#3b4060; text-decoration:none; font-weight:600; font-size:.93rem;
   padding:7px 14px; border-radius:11px; white-space:nowrap; letter-spacing:-.01em;
   transition:color .2s ease, background .2s ease; }
@@ -182,6 +188,16 @@ html, body{ overflow-x:clip; max-width:100%; }
 [data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="stElementContainer"],
 [data-testid="stHorizontalBlock"]:has(.navbar-mark) .stMarkdown,
 [data-testid="stHorizontalBlock"]:has(.navbar-mark) .stButton{ margin:0 !important; }
+/* Streamlit gives the markdown container a -16px bottom margin, so its border
+   box measures shorter than its content and the column centers the wrong box —
+   which dropped the links and the brand below the button's baseline. Zero it
+   and let the container itself be the centering flex box. */
+[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="stMarkdownContainer"]{
+  margin:0 !important; display:flex; align-items:center; width:100%; }
+/* Markdown wraps any bare inline content in a <p> that carries a 16px bottom
+   margin; inside the bar that margin is pure vertical drift. */
+[data-testid="stHorizontalBlock"]:has(.navbar-mark) [data-testid="stMarkdownContainer"] > p{
+  margin:0 !important; }
 [data-testid="stHorizontalBlock"]:has(.navbar-mark) .stButton > button{
   margin:0 !important; line-height:1.1; }
 .navlinks{ line-height:1; }
@@ -242,8 +258,10 @@ iframe[title="streamlit_components.v1.html.html"]{
           mask-composite:intersect; }
 .vhero-scrim{ position:absolute; inset:0; pointer-events:none;
   /* not a box anymore — just a soft radial light behind the headline for depth
-     and legibility, fully transparent everywhere else */
-  background:radial-gradient(58% 52% at 24% 44%, rgba(255,255,255,.34), rgba(255,255,255,0) 72%); }
+     and legibility, fully transparent everywhere else. Kept strong enough that
+     the darkest part of the wave under the copy stays a pale backdrop: the
+     text colors are measured against it. */
+  background:radial-gradient(62% 56% at 24% 44%, rgba(255,255,255,.62), rgba(255,255,255,0) 74%); }
 .vhero-copy{ position:absolute; top:50%; left:max(24px, calc(50vw - 530px)); transform:translateY(-50%);
   max-width:560px; z-index:2; }
 /* Lift the hero's primary CTA up so it sits inside the hero, not in empty space */
@@ -251,10 +269,10 @@ iframe[title="streamlit_components.v1.html.html"]{
 .story{ max-width:1060px; margin:0 auto; padding:120px 0 24px; }
 .story.first{ padding-top:56px; }
 .kicker{ font-size:.8rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase;
-  color:var(--rai-purple); margin-bottom:18px; }
+  color:var(--rai-purple-text); margin-bottom:18px; }
 .display{ font-size:clamp(2.5rem,5.4vw,4.6rem); font-weight:900; letter-spacing:-.035em;
   line-height:1.02; color:var(--rai-ink); margin:0; }
-.display .g{ background:linear-gradient(120deg,#7c5cff,#3b82f6,#22d3ee);
+.display .g{ background:var(--rai-grad-text);
   -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .story .big{ font-size:1.28rem; line-height:1.65; color:var(--rai-muted); max-width:640px; margin:26px 0 0; }
 .story .small{ font-size:1.04rem; line-height:1.6; color:var(--rai-muted); max-width:560px; margin:18px 0 0; }
@@ -284,7 +302,7 @@ iframe[title="streamlit_components.v1.html.html"]{
 .stat.c2 .ic{ background:linear-gradient(135deg,#3b82f6,#22d3ee); box-shadow:0 10px 24px rgba(59,130,246,.35); }
 .stat.c3 .ic{ background:linear-gradient(135deg,#22d3ee,#7c5cff); box-shadow:0 10px 24px rgba(34,211,238,.35); }
 .stat .n{ display:inline-block; font-size:clamp(2.2rem,4.4vw,3.2rem); font-weight:900; letter-spacing:-.03em;
-  background:linear-gradient(120deg,#7c5cff,#22d3ee); -webkit-background-clip:text;
+  background:var(--rai-grad-text); -webkit-background-clip:text;
   background-clip:text; -webkit-text-fill-color:transparent;
   transition:transform .4s cubic-bezier(.2,.8,.2,1); }
 .stat:hover .n{ transform:scale(1.07); }

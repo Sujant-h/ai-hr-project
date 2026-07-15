@@ -356,9 +356,9 @@ def render_nav() -> None:
     with brand:
         st.markdown(
             """
-            <span class="navbar-mark"></span>
             <div style="display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15rem;
-                        color:#0f1226;transform:translateY(-2px);">
+                        color:#0f1226;">
+              <span class="navbar-mark"></span>
               __MARK__
               Recruiting&nbsp;AI
               <span style="font-size:.72rem;font-weight:600;color:#7c5cff;background:rgba(124,92,255,.10);
