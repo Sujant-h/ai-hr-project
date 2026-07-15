@@ -1,6 +1,6 @@
 # Recruiting AI — Multi-Agent HR Demo
 
-A premium, SaaS-style **Streamlit** web app that demonstrates a compliant,
+A premium, SaaS-style **Vite + React and FastAPI** web application that demonstrates a compliant,
 multi-agent recruiting workflow. Recruiters paste a job description, upload or
 paste candidate CVs, and the app extracts structured requirements, matches each
 candidate against them, surfaces information gaps, and drafts follow-up
@@ -331,29 +331,34 @@ is shown in the UI and recorded in the audit log for every action.
 
 ```
 ai-hr-project/
-├── app.py                 # Streamlit UI + session state (the only Streamlit layer)
-├── agents/
-│   ├── rules.py           # Rule-based agents — pure functions, no Streamlit
-│   └── dispatch.py        # LLM first, rule-based fallback; returns an AgentRun
-├── llm_agents.py          # OpenAI backend (same dataclasses as the rule agents)
-├── models.py              # Shared dataclasses — the contract between backends & UI
-├── static/styles.css      # All layout/CSS
-├── tests/                 # pytest suite (no API key or browser needed)
-├── requirements.txt       # Python dependencies (pinned)
-└── requirements-dev.txt   # + pytest
+├── api/                   # FastAPI backend
+│   ├── main.py            # REST endpoints
+│   ├── orchestration.py   # Core HR workflow pipelines
+│   └── schemas.py         # Pydantic schemas mapping to UI
+├── web/                   # Vite + React + Zustand frontend
+│   ├── src/pages/         # React views (Home, Workspace)
+│   └── src/api/           # Auto-generated OpenAPI TypeScript client
+├── agents/                # HR logic (rule-based and LLM agents)
+│   ├── rules.py           # Rule-based agents — pure functions
+│   └── dispatch.py        # LLM first, rule-based fallback
+├── llm_agents.py          # OpenAI backend
+├── models.py              # Shared dataclasses
+├── tests/                 # pytest suite
+└── requirements.txt       # Python dependencies (pinned)
 ```
 
-The layering rule: **only `app.py` imports Streamlit.** The agents are pure
-functions, which is what lets the whole pipeline — including the LLM-failure
-fallback path — be tested without a Streamlit runtime or an API key.
+The application is cleanly decoupled: the React frontend in `web/` communicates via REST with the FastAPI server in `api/`.
+The agents are pure functions, which is what lets the whole pipeline — including the LLM-failure
+fallback path — be tested without a web server or an API key.
 
 ---
 
 ## Requirements
 
 - **Python 3.9+**
+- **Node.js 18+**
 - Dependencies are pinned in `requirements.txt`:
-  - `streamlit` — the web framework
+  - `fastapi` & `uvicorn` — the backend framework
   - `pymupdf` / `pymupdf4llm` — high-quality PDF → Markdown
   - `pypdf` — PDF text extraction (fallback)
   - `openai` — optional LLM backend
@@ -362,7 +367,7 @@ fallback path — be tested without a Streamlit runtime or an API key.
 
 ## How to run it
 
-### 1. Install dependencies
+### 1. Install Backend Dependencies
 
 ```bash
 # From the project directory
@@ -380,16 +385,27 @@ export OPENAI_API_KEY="sk-..."          # Windows PowerShell: $env:OPENAI_API_KE
 export OPENAI_MODEL="gpt-4o-mini"       # optional; this is the default
 ```
 
-### 3. Launch the app
+### 3. Start the FastAPI Backend
 
 ```bash
-streamlit run app.py
+# Keep the virtual environment activated!
+uvicorn api.main:app --reload
+```
+The backend will run on **http://localhost:8000**.
+
+### 4. Start the React Frontend
+
+Open a **new terminal window**, navigate to the `web/` directory, and start the Vite dev server:
+
+```bash
+cd web
+npm install
+npm run dev
 ```
 
-Streamlit will print a local URL (typically **http://localhost:8501**) and open
-it in your browser.
+Vite will print a local URL (typically **http://localhost:5173**) and open it in your browser. All API calls are automatically proxied to port 8000.
 
-### 4. Try it out
+### 5. Try it out
 
 - Click **"✨ Demo-Daten laden"** to load a sample job and three candidates, or
 - Paste your own job description in **① Stellenprofil**, add CVs in
