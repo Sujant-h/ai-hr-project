@@ -28,7 +28,10 @@ import io
 import os
 import re
 import urllib.parse
+from collections import Counter
 from datetime import datetime
+from functools import lru_cache
+from html import escape  # imported as `escape`: render_spline_embed uses `html` as a local
 from typing import Optional
 
 import streamlit as st
@@ -106,16 +109,60 @@ LANGUAGE_VOCAB = {
 # =============================================================================
 
 
+@lru_cache(maxsize=None)
+def _word_pattern(term: str) -> re.Pattern:
+    """Case-insensitive whole-word matcher for `term`, compiled once."""
+    return re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
+
+
+# German writes compounds as one word — "Englischkenntnisse", "SQL-Erfahrung",
+# "Python-Entwickler" — so whole-word matching alone misses skills and languages
+# that a job ad plainly states. Matching bare prefixes instead would be worse:
+# "java" would then match "javascript". A synonym may therefore be followed by
+# one of these qualifier suffixes (optionally hyphenated) and nothing else.
+_COMPOUND_SUFFIXES = (
+    "kenntnisse", "kenntnissen", "kenntnis",
+    "erfahrung", "erfahrungen",
+    "entwickler", "entwicklerin", "entwicklung",
+    "experte", "expertin", "spezialist", "spezialistin",
+    "skills",
+)
+
+
+@lru_cache(maxsize=None)
+def _vocab_pattern(term: str) -> re.Pattern:
+    """Whole-word matcher for `term` that also accepts German compound forms."""
+    suffixes = "|".join(_COMPOUND_SUFFIXES)
+    return re.compile(rf"\b{re.escape(term)}(?:-?(?:{suffixes}))?\b", re.IGNORECASE)
+
+
+def _find_terms_with_context(text: str, vocab: dict) -> list:
+    """Return (canonical_name, source_line) for each vocab entry found in `text`.
+
+    The source line is the line the synonym actually matched on. Callers need it
+    to judge context: looking the canonical name up again afterwards silently
+    misses every term that was found through a synonym.
+    """
+    found = []
+    lines = text.splitlines()
+    for canonical, synonyms in vocab.items():
+        match_line = next(
+            (
+                line
+                for syn in synonyms
+                for line in lines
+                if _vocab_pattern(syn).search(line)
+            ),
+            None,
+        )
+        if match_line is not None:
+            found.append((canonical, match_line))
+    return found
+
+
 def _find_terms(text: str, vocab: dict) -> list:
     """Return the canonical names whose synonyms appear in `text`."""
-    found = []
-    low = text.lower()
-    for canonical, synonyms in vocab.items():
-        for syn in synonyms:
-            if re.search(r"\b" + re.escape(syn) + r"\b", low):
-                found.append(canonical)
-                break
-    return found
+    return [canonical for canonical, _ in _find_terms_with_context(text, vocab)]
 
 
 def _detect_years(text: str) -> Optional[int]:
@@ -125,12 +172,35 @@ def _detect_years(text: str) -> Optional[int]:
     return max(nums) if nums else None
 
 
+# "Ausbildung" doubles as the standard German CV section header, so the bare
+# word on its own line says nothing about a completed qualification.
+_BARE_AUSBILDUNG_HEADER = re.compile(r"^\s*ausbildung\s*:?\s*$", re.IGNORECASE)
+
+
+def _mentions_education(text: str, key: str) -> bool:
+    """True when `key` appears as a stated qualification rather than a header."""
+    pattern = _word_pattern(key)
+    for line in text.splitlines():
+        if not pattern.search(line):
+            continue
+        if key == "ausbildung" and _BARE_AUSBILDUNG_HEADER.match(line):
+            continue
+        return True
+    return False
+
+
 def _detect_education(text: str) -> tuple:
-    """Return (level:int, label:str) for the highest education found."""
-    low = text.lower()
+    """Return (level:int, label:str) for the highest education found.
+
+    Matching is whole-word: a plain substring test credits "Diplomarbeit" as a
+    Diplom and "Masterarbeit" as a Master, promoting candidates to degrees they
+    never claimed.
+    """
     best = 0
     for key, level in EDU_LEVELS.items():
-        if key in low and level > best:
+        if level <= best:  # cannot raise `best` — skip the scan
+            continue
+        if _mentions_education(text, key):
             best = level
     return best, EDU_LABELS.get(best, "unbekannt")
 
@@ -145,23 +215,22 @@ def _detect_email(text: str) -> Optional[str]:
 def stellenprofil_agent(text: str) -> list:
     """Extract measurable requirements from a free-text job profile."""
     requirements: list = []
-    low = text.lower()
 
     def importance_for(snippet: str) -> str:
         nice = ["wünschenswert", "wunschenswert", "von vorteil", "nice to have", "kann", "optional"]
-        return "kann" if any(n in snippet for n in nice) else "muss"
+        low_snippet = snippet.lower()
+        return "kann" if any(n in low_snippet for n in nice) else "muss"
 
-    # Skills
-    for skill in _find_terms(text, SKILL_VOCAB):
-        # look at the line containing the skill to judge importance
-        line = next((ln for ln in low.splitlines() if skill.lower() in ln), "")
+    # Skills — importance is judged on the line the skill was actually matched
+    # on, which is not necessarily a line containing its canonical name.
+    for skill, source_line in _find_terms_with_context(text, SKILL_VOCAB):
         requirements.append(
             Requirement(
                 id=f"skill_{skill.lower().replace(' ', '_')}",
                 label=skill,
                 kind="skill",
                 value=skill,
-                importance=importance_for(line),
+                importance=importance_for(source_line),
             )
         )
 
@@ -303,6 +372,21 @@ def matching_agent(candidate: Candidate, requirements: list) -> list:
 
 def backend_label() -> str:
     return f"LLM ({llm_agents.DEFAULT_MODEL})" if llm_agents.llm_available() else "regelbasiert"
+
+
+def summarize_backends(backends: list) -> str:
+    """Describe which backends actually produced the results, e.g.
+    "2x LLM (gpt-4o-mini), 1x regelbasiert".
+
+    Each item is dispatched independently and may fall back to the rule-based
+    agent on its own LLMError, so a single label cannot describe a batch. The
+    audit trail is this app's transparency record — it has to reflect what ran,
+    not whichever backend happened to run last.
+    """
+    if not backends:
+        return "keine"
+    counts = Counter(backends)
+    return ", ".join(f"{count}x {label}" for label, count in counts.most_common())
 
 
 def analyze_job_profile(text: str) -> tuple:
@@ -452,16 +536,17 @@ def extract_text_from_upload(uploaded_file) -> str:
 def run_full_analysis() -> None:
     """Run the matching, gap and follow-up agents for every candidate."""
     reqs = st.session_state.requirements
-    backend = "regelbasiert"
+    backends: list = []
     for cand in st.session_state.candidates:
         cand.matches, backend = match_candidate(cand, reqs)
+        backends.append(backend)
         cand.gaps = informationsluecken_agent(cand, cand.matches)
         cand.questions = rueckfragen_agent(cand, cand.gaps)
     audit(
         "Matching-Agent",
         "Anforderungsabgleich durchgeführt",
         f"{len(st.session_state.candidates)} Kandidat(en) gegen {len(reqs)} "
-        f"Anforderung(en) geprüft (Backend: {backend}).",
+        f"Anforderung(en) geprüft (Backend: {summarize_backends(backends)}).",
     )
     audit("Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt.")
     audit("Rückfragen-Agent", "Rückfragen generiert", "Höfliche Rückfragen je Informationslücke erstellt.")
@@ -524,10 +609,16 @@ def load_demo_data() -> None:
         f"{len(st.session_state.requirements)} Anforderungen erkannt (Backend: {backend}).",
     )
     st.session_state.candidates = []
+    backends: list = []
     for i, (name, text) in enumerate(DEMO_CVS):
         cand, backend = analyze_cv(name, "Demo-Daten", text, i)
+        backends.append(backend)
         st.session_state.candidates.append(cand)
-    audit("CV-Agent", "Demo-Bewerbungen analysiert", f"{len(DEMO_CVS)} Lebensläufe verarbeitet (Backend: {backend}).")
+    audit(
+        "CV-Agent",
+        "Demo-Bewerbungen analysiert",
+        f"{len(DEMO_CVS)} Lebensläufe verarbeitet (Backend: {summarize_backends(backends)}).",
+    )
     run_full_analysis()
 
 
@@ -947,6 +1038,20 @@ iframe[title="streamlit_components.v1.html.html"]{
   border:1px solid rgba(124,92,255,.20); }
 </style>
 """
+
+
+def _h(value: object) -> str:
+    """Escape a value for interpolation into raw HTML.
+
+    Anything rendered with unsafe_allow_html=True that originates from an
+    uploaded CV, a filename or an LLM response MUST go through this. Without it
+    a CV containing `Name: <img src=x onerror=...>` executes script in the
+    recruiter's session — cv_agent lifts the name straight out of the document
+    and the LLM backend's notes are model-controlled text.
+
+    Only the data needs escaping; the app's own static markup is trusted.
+    """
+    return escape(str(value))
 
 
 def _logo_data_uri() -> Optional[str]:
@@ -1497,7 +1602,7 @@ def render_workspace() -> None:
                 imp_color = "#dc2626" if req.importance == "muss" else "#b4790c"
                 st.markdown(
                     f'<div class="cand" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
-                    f'<span><b>{req.label}</b> <span style="color:#5b6178;font-size:.85rem;">· {req.kind}</span></span>'
+                    f'<span><b>{_h(req.label)}</b> <span style="color:#5b6178;font-size:.85rem;">· {_h(req.kind)}</span></span>'
                     f'<span class="pill" style="background:{imp_color}1a;color:{imp_color};">{imp}</span></div>',
                     unsafe_allow_html=True,
                 )
@@ -1522,9 +1627,9 @@ def render_workspace() -> None:
 
         if st.button("📑 Bewerbungen analysieren", type="primary"):
             new_candidates = []
-            backend = backend_label()
+            backends: list = []
             idx = len(st.session_state.candidates)
-            with st.spinner(f"CV-Agent strukturiert die Lebensläufe … (Backend: {backend})"):
+            with st.spinner(f"CV-Agent strukturiert die Lebensläufe … (Backend: {backend_label()})"):
                 if uploaded:
                     for f in uploaded:
                         # PDF -> Markdown BEFORE the LLM sees anything (token
@@ -1532,10 +1637,12 @@ def render_workspace() -> None:
                         text = extract_text_from_upload(f)
                         base_name = f.name.rsplit(".", 1)[0]
                         cand, backend = analyze_cv(base_name, f.name, text, idx)
+                        backends.append(backend)
                         new_candidates.append(cand)
                         idx += 1
                 if manual.strip():
                     cand, backend = analyze_cv(f"Kandidat {idx + 1}", "Manuelle Eingabe", manual, idx)
+                    backends.append(backend)
                     new_candidates.append(cand)
                     idx += 1
 
@@ -1544,7 +1651,8 @@ def render_workspace() -> None:
                 audit(
                     "CV-Agent",
                     "Bewerbungen analysiert",
-                    f"{len(new_candidates)} Lebenslauf/Lebensläufe verarbeitet (Backend: {backend}).",
+                    f"{len(new_candidates)} Lebenslauf/Lebensläufe verarbeitet "
+                    f"(Backend: {summarize_backends(backends)}).",
                 )
                 st.session_state.analysis_done = False
                 st.success(f"{len(new_candidates)} Bewerbung(en) analysiert. Gesamt: {len(st.session_state.candidates)}.")
@@ -1556,10 +1664,10 @@ def render_workspace() -> None:
             for c in st.session_state.candidates:
                 st.markdown(
                     f'<div class="cand" style="margin-bottom:10px;">'
-                    f'<span class="nm">{c.name}</span> '
-                    f'<span class="meta">· {c.source}</span><br>'
+                    f'<span class="nm">{_h(c.name)}</span> '
+                    f'<span class="meta">· {_h(c.source)}</span><br>'
                     f'<span class="meta">{len(c.skills)} Skills · '
-                    f'{c.years if c.years is not None else "?"} Jahre · {c.education_label}</span></div>',
+                    f'{c.years if c.years is not None else "?"} Jahre · {_h(c.education_label)}</span></div>',
                     unsafe_allow_html=True,
                 )
             if st.button("🗑️ Bewerbungen zurücksetzen"):
@@ -1594,11 +1702,11 @@ def render_workspace() -> None:
                 for i, cand in enumerate(st.session_state.candidates):
                     met = sum(1 for m in cand.matches if m.status == "erfuellt")
                     total = len(cand.matches)
-                    skills_html = "".join(f'<span class="tag">{s}</span>' for s in cand.skills[:6]) or '<span class="meta">keine erkannt</span>'
+                    skills_html = "".join(f'<span class="tag">{_h(s)}</span>' for s in cand.skills[:6]) or '<span class="meta">keine erkannt</span>'
                     with cols[i % 2]:
                         st.markdown(
                             f'<div class="cand" style="margin-bottom:14px;">'
-                            f'<span class="nm">{cand.name}</span>'
+                            f'<span class="nm">{_h(cand.name)}</span>'
                             f'<div class="meta">{met}/{total} Anforderungen erfüllt · '
                             f'{len(cand.gaps)} Informationslücke(n)</div>'
                             f'<div style="margin-top:10px;">{skills_html}</div></div>',
@@ -1684,7 +1792,7 @@ def render_workspace() -> None:
                             + "&body=" + urllib.parse.quote(body)
                         )
                         st.markdown(
-                            f'<a href="{mailto}" target="_blank" style="display:inline-block;'
+                            f'<a href="{_h(mailto)}" target="_blank" style="display:inline-block;'
                             "text-decoration:none;background:linear-gradient(135deg,#7c5cff,#3b82f6);"
                             "color:#fff;font-weight:600;padding:.6rem 1.2rem;border-radius:14px;"
                             'box-shadow:0 12px 30px rgba(124,92,255,.40);">📧 In E-Mail-Programm öffnen</a>'
@@ -1709,9 +1817,9 @@ def render_workspace() -> None:
             for entry in reversed(st.session_state.audit):
                 st.markdown(
                     f'<div class="cand" style="margin-bottom:8px;">'
-                    f'<span class="meta">{entry.timestamp}</span> · '
-                    f'<b style="color:#7c5cff;">{entry.agent}</b> — {entry.action}'
-                    f'<br><span class="meta">{entry.detail}</span></div>',
+                    f'<span class="meta">{_h(entry.timestamp)}</span> · '
+                    f'<b style="color:#7c5cff;">{_h(entry.agent)}</b> — {_h(entry.action)}'
+                    f'<br><span class="meta">{_h(entry.detail)}</span></div>',
                     unsafe_allow_html=True,
                 )
             if st.button("🗑️ Audit Log leeren"):
@@ -1739,8 +1847,8 @@ def render_candidate_detail() -> None:
     st.markdown(
         f'<div class="section" style="margin-top:14px;">'
         f'<span class="eyebrow">Kandidatenprofil</span>'
-        f"<h2>👤 {cand.name}</h2>"
-        f'<p class="lead">Quelle: {cand.source} · Kontakt: {cand.email or "nicht gefunden"} · '
+        f"<h2>👤 {_h(cand.name)}</h2>"
+        f'<p class="lead">Quelle: {_h(cand.source)} · Kontakt: {_h(cand.email or "nicht gefunden")} · '
         f'{met}/{total} Anforderungen erfüllt · {len(cand.gaps)} Informationslücke(n)</p></div>',
         unsafe_allow_html=True,
     )
@@ -1752,7 +1860,7 @@ def render_candidate_detail() -> None:
     m4.metric("Sprachen", len(cand.languages))
 
     if cand.skills:
-        skills_html = "".join(f'<span class="tag">{s}</span>' for s in cand.skills)
+        skills_html = "".join(f'<span class="tag">{_h(s)}</span>' for s in cand.skills)
         st.markdown(f'<div style="margin:10px 0 4px;">{skills_html}</div>', unsafe_allow_html=True)
 
     st.markdown("#### Qualifikationscheckliste")
@@ -1763,7 +1871,7 @@ def render_candidate_detail() -> None:
             st.markdown(
                 f'<div class="cand" style="margin-bottom:8px;display:flex;'
                 f'justify-content:space-between;align-items:center;">'
-                f'<span><b>{m.label}</b> <span class="meta">· {imp} · {m.note}</span></span>'
+                f'<span><b>{_h(m.label)}</b> <span class="meta">· {imp} · {_h(m.note)}</span></span>'
                 f'<span class="pill {pill}">{label_txt}</span></div>',
                 unsafe_allow_html=True,
             )

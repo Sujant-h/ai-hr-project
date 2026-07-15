@@ -1,4 +1,7 @@
-streamlit>=1.32
-pypdf>=4.0
-openai>=1.40
-pymupdf4llm>=0.0.17
+streamlit==1.59.2
+pypdf==6.14.2
+openai==2.45.0
+# pymupdf is imported directly in llm_agents.py, so it is a direct dependency
+# rather than one pulled in implicitly by pymupdf4llm.
+pymupdf==1.28.0
+pymupdf4llm==1.28.0
