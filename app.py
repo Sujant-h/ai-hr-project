@@ -806,6 +806,282 @@ STATUS_META = {
 }
 
 
+def _tab_stellenprofil() -> None:
+    """① Stellenprofil — paste a job ad, extract measurable requirements."""
+    st.subheader("Stellenprofil-Agent")
+    st.caption("Füge die Stellenbeschreibung ein. Der Agent extrahiert messbare Anforderungen.")
+    st.session_state.job_text = st.text_area(
+        "Stellenbeschreibung",
+        value=st.session_state.job_text,
+        height=260,
+        placeholder="z. B. Senior Backend Entwickler – 5 Jahre Erfahrung, Python, SQL, AWS …",
+    )
+    if st.button("🎯 Stellenprofil analysieren", type="primary"):
+        if st.session_state.job_text.strip():
+            with st.spinner(f"Stellenprofil-Agent extrahiert Anforderungen … (Backend: {backend_label()})"):
+                job_run = analyze_job_profile(st.session_state.job_text)
+            audit_fallback("Stellenprofil-Agent", job_run)
+            st.session_state.requirements = job_run.result
+            audit(
+                "Stellenprofil-Agent",
+                "Stellenprofil analysiert",
+                f"{len(st.session_state.requirements)} Anforderung(en) erkannt (Backend: {job_run.backend}).",
+            )
+            st.session_state.analysis_done = False
+            st.success(f"{len(st.session_state.requirements)} Anforderung(en) erkannt.")
+        else:
+            st.warning("Bitte zuerst eine Stellenbeschreibung einfügen.")
+
+    if st.session_state.requirements:
+        st.markdown("##### Erkannte Anforderungen")
+        for req in st.session_state.requirements:
+            imp = "Muss" if req.importance == "muss" else "Kann"
+            imp_color = "#dc2626" if req.importance == "muss" else "#b4790c"
+            st.markdown(
+                f'<div class="cand" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
+                f'<span><b>{_h(req.label)}</b> <span style="color:#5b6178;font-size:.85rem;">· {_h(req.kind)}</span></span>'
+                f'<span class="pill" style="background:{imp_color}1a;color:{imp_color};">{imp}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+
+
+def _tab_bewerbungen() -> None:
+    """② Bewerbungen — upload or paste CVs, extract structured candidates."""
+    st.subheader("CV-Agent")
+    st.caption("Lade Lebensläufe als PDF oder TXT hoch — oder füge Text manuell ein.")
+    if not llm_agents.pdf_support_available():
+        st.info("Hinweis: Es ist keine PDF-Bibliothek installiert (`pymupdf4llm` oder `pypdf`) — "
+                "PDF-Text kann nicht gelesen werden. TXT-Upload und manuelle Eingabe funktionieren.")
+
+    uploaded = st.file_uploader(
+        "Bewerbungen hochladen",
+        type=["pdf", "txt"],
+        accept_multiple_files=True,
+    )
+    manual = st.text_area(
+        "…oder einen Lebenslauf als Text einfügen",
+        height=140,
+        placeholder="Name: …\nBerufserfahrung: …\nSkills: …",
+    )
+
+    if st.button("📑 Bewerbungen analysieren", type="primary"):
+        idx = len(st.session_state.candidates)
+        with st.spinner(f"CV-Agent strukturiert die Lebensläufe … (Backend: {backend_label()})"):
+            # Read every upload here, on the main thread: Streamlit's
+            # UploadedFile is not safe to touch from a worker. PDF ->
+            # Markdown happens BEFORE the LLM sees anything (token
+            # optimization + structure preservation).
+            docs = [
+                (f.name.rsplit(".", 1)[0], f.name, extract_text_from_upload(f))
+                for f in (uploaded or [])
+            ]
+            if manual.strip():
+                docs.append((f"Kandidat {idx + len(docs) + 1}", "Manuelle Eingabe", manual))
+
+            def _analyze(item):
+                offset, (name, source, text) = item
+                return analyze_cv(name, source, text, idx + offset)
+
+            runs = _run_parallel(_analyze, list(enumerate(docs)))
+
+        new_candidates = []
+        backends: list = []
+        for run in runs:
+            audit_fallback("CV-Agent", run)
+            backends.append(run.backend)
+            new_candidates.append(run.result)
+
+        if new_candidates:
+            st.session_state.candidates.extend(new_candidates)
+            audit(
+                "CV-Agent",
+                "Bewerbungen analysiert",
+                f"{len(new_candidates)} Lebenslauf/Lebensläufe verarbeitet "
+                f"(Backend: {summarize_backends(backends)}).",
+            )
+            st.session_state.analysis_done = False
+            st.success(f"{len(new_candidates)} Bewerbung(en) analysiert. Gesamt: {len(st.session_state.candidates)}.")
+        else:
+            st.warning("Bitte mindestens eine Datei hochladen oder Text einfügen.")
+
+    if st.session_state.candidates:
+        st.markdown(f"##### {len(st.session_state.candidates)} Bewerbung(en) im Workspace")
+        for c in st.session_state.candidates:
+            st.markdown(
+                f'<div class="cand" style="margin-bottom:10px;">'
+                f'<span class="nm">{_h(c.name)}</span> '
+                f'<span class="meta">· {_h(c.source)}</span><br>'
+                f'<span class="meta">{len(c.skills)} Skills · '
+                f'{c.years if c.years is not None else "?"} Jahre · {_h(c.education_label)}</span></div>',
+                unsafe_allow_html=True,
+            )
+        if st.button("🗑️ Bewerbungen zurücksetzen"):
+            st.session_state.candidates = []
+            st.session_state.analysis_done = False
+            audit("Workspace", "Bewerbungen zurückgesetzt", "Alle Kandidatendaten entfernt.")
+            st.rerun()
+
+
+
+def _tab_kandidaten() -> None:
+    """③ Kandidaten — run the requirement match and list candidates (never ranked)."""
+    st.subheader("Kandidatenübersicht")
+    if not st.session_state.requirements:
+        st.info("Bitte zuerst ein Stellenprofil analysieren (Tab ①).")
+    elif not st.session_state.candidates:
+        st.info("Bitte zuerst Bewerbungen hochladen (Tab ②).")
+    else:
+        if st.button("▶️ Anforderungsabgleich starten", type="primary"):
+            with st.spinner(f"Matching-Agent vergleicht semantisch … (Backend: {backend_label()})"):
+                run_full_analysis()
+            st.success("Matching, Informationslücken und Rückfragen wurden erstellt.")
+
+        st.markdown(
+            '<div class="hitl" style="margin:8px 0 18px;padding:14px 20px;">'
+            "⚖️ <b>Keine automatische Rangfolge.</b> Die Reihenfolge entspricht dem Upload. "
+            "Es gibt keine Bewertung und keine Empfehlung — die Entscheidung triffst du."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.session_state.analysis_done:
+            cols = st.columns(2)
+            for i, cand in enumerate(st.session_state.candidates):
+                met = sum(1 for m in cand.matches if m.status == "erfuellt")
+                total = len(cand.matches)
+                skills_html = "".join(f'<span class="tag">{_h(s)}</span>' for s in cand.skills[:6]) or '<span class="meta">keine erkannt</span>'
+                with cols[i % 2]:
+                    st.markdown(
+                        f'<div class="cand" style="margin-bottom:14px;">'
+                        f'<span class="nm">{_h(cand.name)}</span>'
+                        f'<div class="meta">{met}/{total} Anforderungen erfüllt · '
+                        f'{len(cand.gaps)} Informationslücke(n)</div>'
+                        f'<div style="margin-top:10px;">{skills_html}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(f"Profil ansehen — {cand.name}", key=f"sel_{cand.id}", use_container_width=True):
+                        st.session_state.selected_candidate = cand.id
+                        st.session_state.page = "candidate"
+                        st.rerun()
+        else:
+            st.caption("Noch kein Abgleich durchgeführt — klicke auf „Anforderungsabgleich starten“.")
+
+
+
+def _tab_informationsluecken() -> None:
+    """④ Informationslücken — where a CV does not clearly answer a requirement."""
+    st.subheader("Informationslücken-Agent")
+    if not st.session_state.analysis_done:
+        st.info("Bitte zuerst den Anforderungsabgleich starten (Tab ③).")
+    else:
+        any_gap = False
+        for cand in st.session_state.candidates:
+            if cand.gaps:
+                any_gap = True
+                st.markdown(f"**{cand.name}** — {len(cand.gaps)} Lücke(n)")
+                for g in cand.gaps:
+                    st.markdown(f"- **{g.requirement_label}**{_kann_marker(g)} — {g.description}")
+                st.markdown("")
+        if not any_gap:
+            st.success("Keine Informationslücken erkannt.")
+
+
+
+def _tab_rueckfragen() -> None:
+    """⑤ Rückfragen — pick follow-up questions and draft an e-mail (never sent)."""
+    st.subheader("Rückfragen-Agent")
+    st.caption("Wähle pro Bewerber:in die gewünschten Rückfragen aus und generiere daraus "
+               "einen E-Mail-Entwurf. Die E-Mail wird **nicht** automatisch versendet.")
+    if not st.session_state.analysis_done:
+        st.info("Bitte zuerst den Anforderungsabgleich starten (Tab ③).")
+    else:
+        any_q = False
+        for cand in st.session_state.candidates:
+            if not cand.questions:
+                continue
+            any_q = True
+            with st.expander(f"💬  {cand.name}  ·  {len(cand.questions)} mögliche Rückfrage(n)", expanded=False):
+                st.markdown("**Rückfragen auswählen:**")
+                selected = []
+                for idx, q in enumerate(cand.questions):
+                    if st.checkbox(q, key=f"q_{cand.id}_{idx}"):
+                        selected.append(q)
+
+                if st.button("✉️ Rückfragen-E-Mail generieren", key=f"genmail_{cand.id}", type="primary"):
+                    if selected:
+                        to, subject, body = generate_email(cand, selected)
+                        ver = st.session_state.email_drafts.get(cand.id, {}).get("ver", 0) + 1
+                        st.session_state.email_drafts[cand.id] = {
+                            "to": to, "subject": subject, "body": body, "ver": ver,
+                        }
+                        audit(
+                            "Rückfragen-Agent",
+                            "E-Mail-Entwurf erstellt",
+                            f"{len(selected)} Rückfrage(n) für {cand.name} zusammengestellt (nicht versendet).",
+                        )
+                    else:
+                        st.warning("Bitte mindestens eine Rückfrage auswählen.")
+
+                # --- E-Mail-Fenster (Entwurf, wird NICHT gesendet) ---
+                draft = st.session_state.email_drafts.get(cand.id)
+                if draft:
+                    ver = draft["ver"]
+                    st.markdown(
+                        '<div class="cand" style="margin-top:14px;border:1px solid rgba(124,92,255,.25);">'
+                        '<div style="display:flex;align-items:center;gap:8px;font-weight:700;color:#0f1226;">'
+                        '✉️ E-Mail-Entwurf <span class="pill pill-part">Entwurf · nicht gesendet</span></div>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+                    to = st.text_input("An", value=draft["to"], key=f"emailto_{cand.id}_{ver}")
+                    subject = st.text_input("Betreff", value=draft["subject"], key=f"emailsub_{cand.id}_{ver}")
+                    body = st.text_area("Nachricht", value=draft["body"], height=320, key=f"emailbody_{cand.id}_{ver}")
+
+                    mailto = (
+                        "mailto:" + urllib.parse.quote(to)
+                        + "?subject=" + urllib.parse.quote(subject)
+                        + "&body=" + urllib.parse.quote(body)
+                    )
+                    st.markdown(
+                        f'<a href="{_h(mailto)}" target="_blank" style="display:inline-block;'
+                        "text-decoration:none;background:linear-gradient(135deg,#7c5cff,#3b82f6);"
+                        "color:#fff;font-weight:600;padding:.6rem 1.2rem;border-radius:14px;"
+                        'box-shadow:0 12px 30px rgba(124,92,255,.40);">📧 In E-Mail-Programm öffnen</a>'
+                        '<span class="meta" style="margin-left:12px;">Öffnet deinen Mail-Client mit '
+                        "vorausgefülltem Entwurf — Versand bestätigst du selbst.</span>",
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("🗑️ Entwurf verwerfen", key=f"deldraft_{cand.id}"):
+                        st.session_state.email_drafts.pop(cand.id, None)
+                        st.rerun()
+
+        if not any_q:
+            st.success("Keine Rückfragen nötig — alle Angaben vollständig.")
+
+
+
+def _tab_audit() -> None:
+    """⑥ Audit Log — the timestamped trail of every agent action."""
+    st.subheader("Audit Log")
+    st.caption("Jeder Verarbeitungsschritt wird lückenlos dokumentiert.")
+    if not st.session_state.audit:
+        st.info("Noch keine Aktivität protokolliert.")
+    else:
+        for entry in reversed(st.session_state.audit):
+            st.markdown(
+                f'<div class="cand" style="margin-bottom:8px;">'
+                f'<span class="meta">{_h(entry.timestamp)}</span> · '
+                f'<b style="color:#7c5cff;">{_h(entry.agent)}</b> — {_h(entry.action)}'
+                f'<br><span class="meta">{_h(entry.detail)}</span></div>',
+                unsafe_allow_html=True,
+            )
+        if st.button("🗑️ Audit Log leeren"):
+            st.session_state.audit = []
+            st.rerun()
+
+
+
 def render_workspace() -> None:
     # Spline graphic as a header background, with the title overlaid on top.
     render_spline_embed(SPLINE_PROBLEM, height=300)
@@ -850,270 +1126,16 @@ def render_workspace() -> None:
             "⑥ Audit Log",
         ]
     )
-
-    # --- Tab 1: Stellenprofil ---
-    with tabs[0]:
-        st.subheader("Stellenprofil-Agent")
-        st.caption("Füge die Stellenbeschreibung ein. Der Agent extrahiert messbare Anforderungen.")
-        st.session_state.job_text = st.text_area(
-            "Stellenbeschreibung",
-            value=st.session_state.job_text,
-            height=260,
-            placeholder="z. B. Senior Backend Entwickler – 5 Jahre Erfahrung, Python, SQL, AWS …",
-        )
-        if st.button("🎯 Stellenprofil analysieren", type="primary"):
-            if st.session_state.job_text.strip():
-                with st.spinner(f"Stellenprofil-Agent extrahiert Anforderungen … (Backend: {backend_label()})"):
-                    job_run = analyze_job_profile(st.session_state.job_text)
-                audit_fallback("Stellenprofil-Agent", job_run)
-                st.session_state.requirements = job_run.result
-                audit(
-                    "Stellenprofil-Agent",
-                    "Stellenprofil analysiert",
-                    f"{len(st.session_state.requirements)} Anforderung(en) erkannt (Backend: {job_run.backend}).",
-                )
-                st.session_state.analysis_done = False
-                st.success(f"{len(st.session_state.requirements)} Anforderung(en) erkannt.")
-            else:
-                st.warning("Bitte zuerst eine Stellenbeschreibung einfügen.")
-
-        if st.session_state.requirements:
-            st.markdown("##### Erkannte Anforderungen")
-            for req in st.session_state.requirements:
-                imp = "Muss" if req.importance == "muss" else "Kann"
-                imp_color = "#dc2626" if req.importance == "muss" else "#b4790c"
-                st.markdown(
-                    f'<div class="cand" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
-                    f'<span><b>{_h(req.label)}</b> <span style="color:#5b6178;font-size:.85rem;">· {_h(req.kind)}</span></span>'
-                    f'<span class="pill" style="background:{imp_color}1a;color:{imp_color};">{imp}</span></div>',
-                    unsafe_allow_html=True,
-                )
-
-    # --- Tab 2: Bewerbungen ---
-    with tabs[1]:
-        st.subheader("CV-Agent")
-        st.caption("Lade Lebensläufe als PDF oder TXT hoch — oder füge Text manuell ein.")
-        if not llm_agents.pdf_support_available():
-            st.info("Hinweis: Es ist keine PDF-Bibliothek installiert (`pymupdf4llm` oder `pypdf`) — "
-                    "PDF-Text kann nicht gelesen werden. TXT-Upload und manuelle Eingabe funktionieren.")
-
-        uploaded = st.file_uploader(
-            "Bewerbungen hochladen",
-            type=["pdf", "txt"],
-            accept_multiple_files=True,
-        )
-        manual = st.text_area(
-            "…oder einen Lebenslauf als Text einfügen",
-            height=140,
-            placeholder="Name: …\nBerufserfahrung: …\nSkills: …",
-        )
-
-        if st.button("📑 Bewerbungen analysieren", type="primary"):
-            idx = len(st.session_state.candidates)
-            with st.spinner(f"CV-Agent strukturiert die Lebensläufe … (Backend: {backend_label()})"):
-                # Read every upload here, on the main thread: Streamlit's
-                # UploadedFile is not safe to touch from a worker. PDF ->
-                # Markdown happens BEFORE the LLM sees anything (token
-                # optimization + structure preservation).
-                docs = [
-                    (f.name.rsplit(".", 1)[0], f.name, extract_text_from_upload(f))
-                    for f in (uploaded or [])
-                ]
-                if manual.strip():
-                    docs.append((f"Kandidat {idx + len(docs) + 1}", "Manuelle Eingabe", manual))
-
-                def _analyze(item):
-                    offset, (name, source, text) = item
-                    return analyze_cv(name, source, text, idx + offset)
-
-                runs = _run_parallel(_analyze, list(enumerate(docs)))
-
-            new_candidates = []
-            backends: list = []
-            for run in runs:
-                audit_fallback("CV-Agent", run)
-                backends.append(run.backend)
-                new_candidates.append(run.result)
-
-            if new_candidates:
-                st.session_state.candidates.extend(new_candidates)
-                audit(
-                    "CV-Agent",
-                    "Bewerbungen analysiert",
-                    f"{len(new_candidates)} Lebenslauf/Lebensläufe verarbeitet "
-                    f"(Backend: {summarize_backends(backends)}).",
-                )
-                st.session_state.analysis_done = False
-                st.success(f"{len(new_candidates)} Bewerbung(en) analysiert. Gesamt: {len(st.session_state.candidates)}.")
-            else:
-                st.warning("Bitte mindestens eine Datei hochladen oder Text einfügen.")
-
-        if st.session_state.candidates:
-            st.markdown(f"##### {len(st.session_state.candidates)} Bewerbung(en) im Workspace")
-            for c in st.session_state.candidates:
-                st.markdown(
-                    f'<div class="cand" style="margin-bottom:10px;">'
-                    f'<span class="nm">{_h(c.name)}</span> '
-                    f'<span class="meta">· {_h(c.source)}</span><br>'
-                    f'<span class="meta">{len(c.skills)} Skills · '
-                    f'{c.years if c.years is not None else "?"} Jahre · {_h(c.education_label)}</span></div>',
-                    unsafe_allow_html=True,
-                )
-            if st.button("🗑️ Bewerbungen zurücksetzen"):
-                st.session_state.candidates = []
-                st.session_state.analysis_done = False
-                audit("Workspace", "Bewerbungen zurückgesetzt", "Alle Kandidatendaten entfernt.")
-                st.rerun()
-
-    # --- Tab 3: Kandidaten (overview + detail) ---
-    with tabs[2]:
-        st.subheader("Kandidatenübersicht")
-        if not st.session_state.requirements:
-            st.info("Bitte zuerst ein Stellenprofil analysieren (Tab ①).")
-        elif not st.session_state.candidates:
-            st.info("Bitte zuerst Bewerbungen hochladen (Tab ②).")
-        else:
-            if st.button("▶️ Anforderungsabgleich starten", type="primary"):
-                with st.spinner(f"Matching-Agent vergleicht semantisch … (Backend: {backend_label()})"):
-                    run_full_analysis()
-                st.success("Matching, Informationslücken und Rückfragen wurden erstellt.")
-
-            st.markdown(
-                '<div class="hitl" style="margin:8px 0 18px;padding:14px 20px;">'
-                "⚖️ <b>Keine automatische Rangfolge.</b> Die Reihenfolge entspricht dem Upload. "
-                "Es gibt keine Bewertung und keine Empfehlung — die Entscheidung triffst du."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-
-            if st.session_state.analysis_done:
-                cols = st.columns(2)
-                for i, cand in enumerate(st.session_state.candidates):
-                    met = sum(1 for m in cand.matches if m.status == "erfuellt")
-                    total = len(cand.matches)
-                    skills_html = "".join(f'<span class="tag">{_h(s)}</span>' for s in cand.skills[:6]) or '<span class="meta">keine erkannt</span>'
-                    with cols[i % 2]:
-                        st.markdown(
-                            f'<div class="cand" style="margin-bottom:14px;">'
-                            f'<span class="nm">{_h(cand.name)}</span>'
-                            f'<div class="meta">{met}/{total} Anforderungen erfüllt · '
-                            f'{len(cand.gaps)} Informationslücke(n)</div>'
-                            f'<div style="margin-top:10px;">{skills_html}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                        if st.button(f"Profil ansehen — {cand.name}", key=f"sel_{cand.id}", use_container_width=True):
-                            st.session_state.selected_candidate = cand.id
-                            st.session_state.page = "candidate"
-                            st.rerun()
-            else:
-                st.caption("Noch kein Abgleich durchgeführt — klicke auf „Anforderungsabgleich starten“.")
-
-    # --- Tab 4: Informationslücken ---
-    with tabs[3]:
-        st.subheader("Informationslücken-Agent")
-        if not st.session_state.analysis_done:
-            st.info("Bitte zuerst den Anforderungsabgleich starten (Tab ③).")
-        else:
-            any_gap = False
-            for cand in st.session_state.candidates:
-                if cand.gaps:
-                    any_gap = True
-                    st.markdown(f"**{cand.name}** — {len(cand.gaps)} Lücke(n)")
-                    for g in cand.gaps:
-                        st.markdown(f"- **{g.requirement_label}**{_kann_marker(g)} — {g.description}")
-                    st.markdown("")
-            if not any_gap:
-                st.success("Keine Informationslücken erkannt.")
-
-    # --- Tab 5: Rückfragen ---
-    with tabs[4]:
-        st.subheader("Rückfragen-Agent")
-        st.caption("Wähle pro Bewerber:in die gewünschten Rückfragen aus und generiere daraus "
-                   "einen E-Mail-Entwurf. Die E-Mail wird **nicht** automatisch versendet.")
-        if not st.session_state.analysis_done:
-            st.info("Bitte zuerst den Anforderungsabgleich starten (Tab ③).")
-        else:
-            any_q = False
-            for cand in st.session_state.candidates:
-                if not cand.questions:
-                    continue
-                any_q = True
-                with st.expander(f"💬  {cand.name}  ·  {len(cand.questions)} mögliche Rückfrage(n)", expanded=False):
-                    st.markdown("**Rückfragen auswählen:**")
-                    selected = []
-                    for idx, q in enumerate(cand.questions):
-                        if st.checkbox(q, key=f"q_{cand.id}_{idx}"):
-                            selected.append(q)
-
-                    if st.button("✉️ Rückfragen-E-Mail generieren", key=f"genmail_{cand.id}", type="primary"):
-                        if selected:
-                            to, subject, body = generate_email(cand, selected)
-                            ver = st.session_state.email_drafts.get(cand.id, {}).get("ver", 0) + 1
-                            st.session_state.email_drafts[cand.id] = {
-                                "to": to, "subject": subject, "body": body, "ver": ver,
-                            }
-                            audit(
-                                "Rückfragen-Agent",
-                                "E-Mail-Entwurf erstellt",
-                                f"{len(selected)} Rückfrage(n) für {cand.name} zusammengestellt (nicht versendet).",
-                            )
-                        else:
-                            st.warning("Bitte mindestens eine Rückfrage auswählen.")
-
-                    # --- E-Mail-Fenster (Entwurf, wird NICHT gesendet) ---
-                    draft = st.session_state.email_drafts.get(cand.id)
-                    if draft:
-                        ver = draft["ver"]
-                        st.markdown(
-                            '<div class="cand" style="margin-top:14px;border:1px solid rgba(124,92,255,.25);">'
-                            '<div style="display:flex;align-items:center;gap:8px;font-weight:700;color:#0f1226;">'
-                            '✉️ E-Mail-Entwurf <span class="pill pill-part">Entwurf · nicht gesendet</span></div>'
-                            '</div>',
-                            unsafe_allow_html=True,
-                        )
-                        to = st.text_input("An", value=draft["to"], key=f"emailto_{cand.id}_{ver}")
-                        subject = st.text_input("Betreff", value=draft["subject"], key=f"emailsub_{cand.id}_{ver}")
-                        body = st.text_area("Nachricht", value=draft["body"], height=320, key=f"emailbody_{cand.id}_{ver}")
-
-                        mailto = (
-                            "mailto:" + urllib.parse.quote(to)
-                            + "?subject=" + urllib.parse.quote(subject)
-                            + "&body=" + urllib.parse.quote(body)
-                        )
-                        st.markdown(
-                            f'<a href="{_h(mailto)}" target="_blank" style="display:inline-block;'
-                            "text-decoration:none;background:linear-gradient(135deg,#7c5cff,#3b82f6);"
-                            "color:#fff;font-weight:600;padding:.6rem 1.2rem;border-radius:14px;"
-                            'box-shadow:0 12px 30px rgba(124,92,255,.40);">📧 In E-Mail-Programm öffnen</a>'
-                            '<span class="meta" style="margin-left:12px;">Öffnet deinen Mail-Client mit '
-                            "vorausgefülltem Entwurf — Versand bestätigst du selbst.</span>",
-                            unsafe_allow_html=True,
-                        )
-                        if st.button("🗑️ Entwurf verwerfen", key=f"deldraft_{cand.id}"):
-                            st.session_state.email_drafts.pop(cand.id, None)
-                            st.rerun()
-
-            if not any_q:
-                st.success("Keine Rückfragen nötig — alle Angaben vollständig.")
-
-    # --- Tab 6: Audit Log ---
-    with tabs[5]:
-        st.subheader("Audit Log")
-        st.caption("Jeder Verarbeitungsschritt wird lückenlos dokumentiert.")
-        if not st.session_state.audit:
-            st.info("Noch keine Aktivität protokolliert.")
-        else:
-            for entry in reversed(st.session_state.audit):
-                st.markdown(
-                    f'<div class="cand" style="margin-bottom:8px;">'
-                    f'<span class="meta">{_h(entry.timestamp)}</span> · '
-                    f'<b style="color:#7c5cff;">{_h(entry.agent)}</b> — {_h(entry.action)}'
-                    f'<br><span class="meta">{_h(entry.detail)}</span></div>',
-                    unsafe_allow_html=True,
-                )
-            if st.button("🗑️ Audit Log leeren"):
-                st.session_state.audit = []
-                st.rerun()
+    for tab, render in zip(tabs, (
+        _tab_stellenprofil,
+        _tab_bewerbungen,
+        _tab_kandidaten,
+        _tab_informationsluecken,
+        _tab_rueckfragen,
+        _tab_audit,
+    )):
+        with tab:
+            render()
 
 
 def render_candidate_detail() -> None:
