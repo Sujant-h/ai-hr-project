@@ -16,8 +16,15 @@ The code is split into layers, each in its own module:
                        agents/dispatch.py   (LLM first, rules as fallback)
 3. UI / LAYOUT      -> this module          (render_* functions + Streamlit state)
 4. CSS              -> static/styles.css
+5. BOOT APPEARANCE  -> .streamlit/config.toml
 
 Only this module imports Streamlit: the agents stay pure and testable.
+
+The split between (4) and (5) matters: styles.css is injected while the script
+runs, so it only lands once the websocket delivers the first deltas. Anything
+that must be right at the *first* paint — hiding the stock toolbar, the page
+background — has to live in config.toml instead, or it flashes Streamlit's
+default chrome first. Keep the colours in the two files in sync.
 
 Human-in-the-loop principle
 ---------------------------

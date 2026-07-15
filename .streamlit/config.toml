@@ -1,0 +1,25 @@
+# Boot-time appearance.
+#
+# Everything else about this app's look lives in static/styles.css, which is
+# injected with st.markdown while the script runs — i.e. only after the browser
+# has already painted Streamlit's default shell. That gap is visible: on a cold
+# load you get default chrome and default colours until the stylesheet lands.
+#
+# These options are baked into the page Streamlit serves, so they apply to the
+# very first paint and close that gap. Keep the colours in sync with the
+# --rai-* tokens at the top of static/styles.css.
+
+[client]
+# Never render the "Deploy"/status toolbar. styles.css also hides it, but only
+# once it arrives; this keeps it out of the document from the start.
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+# styles.css sets Inter everywhere; system sans is the closest boot-time stand-in
+# (Streamlit's own default would otherwise flash a different typeface).
+font = "sans-serif"
+primaryColor = "#7c5cff"          # --rai-purple
+backgroundColor = "#f7f6ff"       # first stop of the .stApp gradient
+secondaryBackgroundColor = "#f1f2fb"
+textColor = "#0f1226"             # --rai-ink
