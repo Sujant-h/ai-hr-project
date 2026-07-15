@@ -11,6 +11,7 @@ import pytest
 
 import app
 import llm_agents
+from api import orchestration
 from models import Candidate, MatchResult, Requirement
 
 
@@ -62,7 +63,7 @@ def _match_for(cand: Candidate) -> app.AgentRun:
 def test_each_candidate_gets_its_own_matches(session, monkeypatch):
     """Guards the parallel path: every candidate must receive the result computed
     from its own CV, not a neighbour's."""
-    monkeypatch.setattr(app, "match_candidate", lambda cand, reqs: _match_for(cand))
+    monkeypatch.setattr(orchestration, "match_candidate", lambda cand, reqs: _match_for(cand))
 
     app.run_full_analysis()
 
@@ -71,7 +72,7 @@ def test_each_candidate_gets_its_own_matches(session, monkeypatch):
 
 
 def test_analysis_is_marked_done_and_downstream_agents_ran(session, monkeypatch):
-    monkeypatch.setattr(app, "match_candidate", lambda cand, reqs: _match_for(cand))
+    monkeypatch.setattr(orchestration, "match_candidate", lambda cand, reqs: _match_for(cand))
 
     app.run_full_analysis()
 
@@ -91,7 +92,7 @@ def test_second_run_is_served_from_cache(session, monkeypatch):
         calls.append(cand.id)
         return _match_for(cand)
 
-    monkeypatch.setattr(app, "match_candidate", counting_match)
+    monkeypatch.setattr(orchestration, "match_candidate", counting_match)
 
     app.run_full_analysis()
     assert len(calls) == 3
@@ -107,7 +108,7 @@ def test_changing_the_job_profile_invalidates_the_cache(session, monkeypatch):
         calls.append(cand.id)
         return _match_for(cand)
 
-    monkeypatch.setattr(app, "match_candidate", counting_match)
+    monkeypatch.setattr(orchestration, "match_candidate", counting_match)
 
     app.run_full_analysis()
     assert len(calls) == 3
@@ -130,7 +131,7 @@ def test_a_failed_llm_call_is_retried_on_the_next_run(session, monkeypatch):
         run.fallback_reason = "API timeout"
         return run
 
-    monkeypatch.setattr(app, "match_candidate", failing_match)
+    monkeypatch.setattr(orchestration, "match_candidate", failing_match)
 
     app.run_full_analysis()
     app.run_full_analysis()
@@ -143,7 +144,7 @@ def test_fallbacks_reach_the_audit_log(session, monkeypatch):
         run.fallback_reason = "API timeout"
         return run
 
-    monkeypatch.setattr(app, "match_candidate", failing_match)
+    monkeypatch.setattr(orchestration, "match_candidate", failing_match)
 
     app.run_full_analysis()
 

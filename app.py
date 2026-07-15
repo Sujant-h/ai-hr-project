@@ -49,17 +49,19 @@ from agents.dispatch import (
     analyze_cv,
     analyze_job_profile,
     backend_label,
-    match_candidate,
     summarize_backends,
 )
 from agents import rules
-from agents.rules import (
-    generate_email,
-    informationsluecken_agent,
-    rueckfragen_agent,
-)
+from agents.rules import generate_email
 from api.demo_data import DEMO_CVS, DEMO_JOB
-from api.orchestration import _run_parallel, audit_entry, fallback_entries
+from api.orchestration import (
+    _run_parallel,
+    analyze_candidates,
+    audit_entry,
+    batch_summary_entries,
+    derive_gaps_and_questions,
+    fallback_entries,
+)
 
 
 def audit_fallback(agent: str, run: AgentRun) -> None:
@@ -115,36 +117,43 @@ def extract_text_from_upload(uploaded_file) -> str:
 
 
 def run_full_analysis() -> None:
-    """Run the matching, gap and follow-up agents for every candidate."""
+    """Run the matching, gap and follow-up agents for every candidate.
+
+    The analysis itself lives in api/orchestration.py, shared with the API. This
+    wrapper owns only what is Streamlit's: the session cache and the audit log.
+    """
     reqs = st.session_state.requirements
     candidates = st.session_state.candidates
     reqs_key = requirements_key(reqs)
     keys = [cache_key(cand.raw_text, reqs_key) for cand in candidates]
 
-    # Only candidates without a cached result reach the API, and they go in
-    # parallel rather than one round-trip after another.
+    # Only candidates without a cached result reach the backend.
     todo = [cand for cand, key in zip(candidates, keys) if cache_get(key) is None]
-    fresh = _run_parallel(lambda cand: match_candidate(cand, reqs), todo)
-    for cand, run in zip(todo, fresh):
-        audit_fallback("Matching-Agent", run)
-        cache_put(cache_key(cand.raw_text, reqs_key), run)
-    by_candidate_id = {id(cand): run for cand, run in zip(todo, fresh)}
+    analyses, entries = analyze_candidates(reqs, todo)
+    for analysis in analyses:
+        cache_put(
+            cache_key(analysis.candidate.raw_text, reqs_key),
+            AgentRun(analysis.candidate.matches, analysis.backend, analysis.fallback_reason),
+        )
 
+    # One backend per candidate the user sees, in candidate order: freshly
+    # computed ones from this run, the rest recovered from the cache. Cached
+    # candidates also need their matches reattached and their (cheap, never
+    # cached) gaps and questions re-derived.
+    fresh = {id(a.candidate): a.backend for a in analyses}
     backends: list = []
     for cand, key in zip(candidates, keys):
-        run = by_candidate_id.get(id(cand)) or cache_get(key)
+        if id(cand) in fresh:
+            backends.append(fresh[id(cand)])
+            continue
+        run = cache_get(key)
         cand.matches = run.result
+        derive_gaps_and_questions(cand)
         backends.append(run.backend)
-        cand.gaps = informationsluecken_agent(cand, cand.matches)
-        cand.questions = rueckfragen_agent(cand, cand.gaps)
-    audit(
-        "Matching-Agent",
-        "Anforderungsabgleich durchgeführt",
-        f"{len(candidates)} Kandidat(en) gegen {len(reqs)} "
-        f"Anforderung(en) geprüft (Backend: {summarize_backends(backends)}).",
-    )
-    audit("Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt.")
-    audit("Rückfragen-Agent", "Rückfragen generiert", "Höfliche Rückfragen je Informationslücke erstellt.")
+
+    entries.extend(batch_summary_entries(reqs, backends))
+    for entry in entries:
+        st.session_state.audit.append(entry)
     st.session_state.analysis_done = True
 
 
