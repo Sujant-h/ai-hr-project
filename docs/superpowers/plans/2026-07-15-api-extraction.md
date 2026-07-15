@@ -397,8 +397,18 @@ git commit -m "Move parallel dispatch into the orchestration layer"
 - Produces:
   - `api.orchestration.CandidateAnalysis` — dataclass with `candidate: Candidate`, `backend: str`, `fallback_reason: Optional[str]`
   - `api.orchestration.analyze_candidates(requirements: list, candidates: list) -> tuple[list[CandidateAnalysis], list[AuditEntry]]`
+  - `api.orchestration.batch_summary_entries(requirements: list, backends: list) -> list[AuditEntry]`
 
 **Why `CandidateAnalysis` exists:** the React client owns the cache, and `cache_put`'s rule is that a fallback is never cached. The client can only honour that if the response says, *per candidate*, whether that result was a fallback. A single batch-level backend label cannot express a mixed batch — which is the exact bug `test_audit.py` was written to prevent.
+
+**Why the caller composes the batch summary:** callers send only their *uncached*
+candidates, so `analyze_candidates` never sees the full batch and cannot describe
+it. If it tried, a fully-cached re-run would log "0 Kandidat(en) geprüft" while N
+analyzed candidates sit on screen. The caller — `app.py` now, the React store in
+Phase 3 — is the only party holding cached and fresh results together, so it
+builds the summary and passes in the complete backend list. `analyze_candidates`
+emits only what it can vouch for: per-candidate fallbacks. Same instinct as
+`AgentRun`: the function reports, the caller records.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -504,10 +514,26 @@ def test_fallbacks_reach_the_audit_entries(monkeypatch, reqs, candidates):
     assert any("API timeout" in e.detail for e in entries)
 
 
-def test_the_batch_summary_counts_every_candidate(monkeypatch, reqs, candidates):
+def test_analyze_candidates_does_not_claim_a_batch_it_cannot_see(monkeypatch, reqs, candidates):
+    """Callers pass only their uncached candidates, so this function never sees
+    the whole batch and must not describe one."""
     monkeypatch.setattr(orchestration, "match_candidate", lambda c, r: _match_for(c))
 
     _, entries = analyze_candidates(reqs, candidates)
+
+    assert not any(e.action == "Anforderungsabgleich durchgeführt" for e in entries)
+
+
+def test_no_candidates_is_handled(monkeypatch, reqs):
+    analyses, entries = analyze_candidates(reqs, [])
+    assert analyses == []
+    assert entries == []
+
+
+def test_the_batch_summary_counts_every_backend_it_is_given(reqs):
+    """The caller holds cached and fresh results together, so it passes the full
+    backend list — including the backends that produced cached results."""
+    entries = orchestration.batch_summary_entries(reqs, ["regelbasiert"] * 3)
 
     summary = [e for e in entries if e.action == "Anforderungsabgleich durchgeführt"]
     assert len(summary) == 1
@@ -516,10 +542,21 @@ def test_the_batch_summary_counts_every_candidate(monkeypatch, reqs, candidates)
     assert "3x regelbasiert" in summary[0].detail
 
 
-def test_no_candidates_is_handled(monkeypatch, reqs):
-    analyses, entries = analyze_candidates(reqs, [])
-    assert analyses == []
-    assert any(e.action == "Anforderungsabgleich durchgeführt" for e in entries)
+def test_the_batch_summary_reports_a_mixed_batch_honestly(reqs):
+    """The exact bug test_audit.py guards: one candidate falling back must not be
+    hidden behind whichever backend ran last."""
+    entries = orchestration.batch_summary_entries(reqs, ["regelbasiert", "LLM (gpt-4o-mini)"])
+
+    detail = entries[0].detail
+    assert "1x regelbasiert" in detail
+    assert "1x LLM (gpt-4o-mini)" in detail
+
+
+def test_the_batch_summary_includes_the_local_agent_entries(reqs):
+    entries = orchestration.batch_summary_entries(reqs, ["regelbasiert"])
+    actions = [e.action for e in entries]
+    assert "Lücken analysiert" in actions
+    assert "Rückfragen generiert" in actions
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -566,39 +603,52 @@ def derive_gaps_and_questions(candidate: Candidate) -> None:
 def analyze_candidates(
     requirements: list, candidates: list
 ) -> tuple[list[CandidateAnalysis], list[AuditEntry]]:
-    """Match every candidate against every requirement, then derive gaps and
-    follow-up questions.
+    """Match every candidate given against every requirement, then derive gaps
+    and follow-up questions.
 
-    Returns the analyses in input order plus the audit entries the caller should
-    record. Nothing is stored here — that is what keeps the API stateless.
+    Returns the analyses in input order plus the audit entries this function can
+    vouch for — per-candidate fallbacks only. Callers pass just their uncached
+    candidates, so this function never sees the whole batch: composing the batch
+    summary is the caller's job (see batch_summary_entries).
+
+    Nothing is stored here — that is what keeps the API stateless.
     """
     runs = _run_parallel(lambda cand: match_candidate(cand, requirements), candidates)
 
     entries: list[AuditEntry] = []
     analyses: list[CandidateAnalysis] = []
-    backends: list = []
     for cand, run in zip(candidates, runs):
         entries.extend(fallback_entries("Matching-Agent", run))
         cand.matches = run.result
         derive_gaps_and_questions(cand)
-        backends.append(run.backend)
         analyses.append(CandidateAnalysis(cand, run.backend, run.fallback_reason))
 
-    entries.append(
+    return analyses, entries
+
+
+def batch_summary_entries(requirements: list, backends: list) -> list[AuditEntry]:
+    """Summarise a completed analysis run for the audit trail.
+
+    `backends` must cover EVERY candidate the user sees, including those served
+    from cache — the caller is the only party holding cached and fresh results
+    together. Passing only the freshly computed ones would log "0 Kandidat(en)
+    geprüft" on a cached re-run, and the audit log is this app's transparency
+    record: it has to state what actually produced each displayed result.
+    """
+    return [
         audit_entry(
             "Matching-Agent",
             "Anforderungsabgleich durchgeführt",
-            f"{len(candidates)} Kandidat(en) gegen {len(requirements)} "
+            f"{len(backends)} Kandidat(en) gegen {len(requirements)} "
             f"Anforderung(en) geprüft (Backend: {summarize_backends(backends)}).",
-        )
-    )
-    entries.append(
-        audit_entry("Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt.")
-    )
-    entries.append(
-        audit_entry("Rückfragen-Agent", "Rückfragen generiert", "Höfliche Rückfragen je Informationslücke erstellt.")
-    )
-    return analyses, entries
+        ),
+        audit_entry(
+            "Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt."
+        ),
+        audit_entry(
+            "Rückfragen-Agent", "Rückfragen generiert", "Höfliche Rückfragen je Informationslücke erstellt."
+        ),
+    ]
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -622,10 +672,15 @@ git commit -m "Extract the analysis core as a pure function"
 - Test: `tests/test_run_full_analysis.py` (unchanged — it must still pass)
 
 **Interfaces:**
-- Consumes: `api.orchestration.analyze_candidates`, `api.orchestration.derive_gaps_and_questions`
+- Consumes: `api.orchestration.analyze_candidates`, `api.orchestration.derive_gaps_and_questions`, `api.orchestration.batch_summary_entries`
 - Produces: nothing new
 
 **Why:** this is the task that proves the extraction is correct. `test_run_full_analysis.py` is **not modified** — if the Streamlit path still passes its existing tests against the new core, the core is faithful. The cache and session writes stay in `app.py`; only the shared logic is delegated.
+
+**The `backends` list is the subtle part.** It must carry one entry per candidate
+*the user sees*, in candidate order, pulling each cached candidate's original
+backend back out of the cache. Build it from only the freshly computed ones and a
+cached re-run logs "0 Kandidat(en) geprüft" while N candidates sit on screen.
 
 - [ ] **Step 1: Rewrite `run_full_analysis`**
 
@@ -643,7 +698,7 @@ def run_full_analysis() -> None:
     reqs_key = requirements_key(reqs)
     keys = [cache_key(cand.raw_text, reqs_key) for cand in candidates]
 
-    # Only candidates without a cached result reach the API.
+    # Only candidates without a cached result reach the backend.
     todo = [cand for cand, key in zip(candidates, keys) if cache_get(key) is None]
     analyses, entries = analyze_candidates(reqs, todo)
     for analysis in analyses:
@@ -652,15 +707,22 @@ def run_full_analysis() -> None:
             AgentRun(analysis.candidate.matches, analysis.backend, analysis.fallback_reason),
         )
 
-    # Cached candidates: reattach the matches, then re-derive the local-only
-    # gaps and questions (they are cheap and never cached).
-    fresh = {id(a.candidate) for a in analyses}
+    # One backend per candidate the user sees, in candidate order: freshly
+    # computed ones from this run, the rest recovered from the cache. Cached
+    # candidates also need their matches reattached and their (cheap, never
+    # cached) gaps and questions re-derived.
+    fresh = {id(a.candidate): a.backend for a in analyses}
+    backends: list = []
     for cand, key in zip(candidates, keys):
         if id(cand) in fresh:
+            backends.append(fresh[id(cand)])
             continue
-        cand.matches = cache_get(key).result
+        run = cache_get(key)
+        cand.matches = run.result
         derive_gaps_and_questions(cand)
+        backends.append(run.backend)
 
+    entries.extend(batch_summary_entries(reqs, backends))
     for entry in entries:
         st.session_state.audit.append(entry)
     st.session_state.analysis_done = True
@@ -669,7 +731,7 @@ def run_full_analysis() -> None:
 Add to the import block:
 
 ```python
-from api.orchestration import analyze_candidates, derive_gaps_and_questions
+from api.orchestration import analyze_candidates, batch_summary_entries, derive_gaps_and_questions
 ```
 
 `app.py` no longer needs `informationsluecken_agent` / `rueckfragen_agent` / `summarize_backends` imported for this function — remove them from the import block **only if** no other code in `app.py` uses them (`_tab_rueckfragen` and `load_demo_data` may).
@@ -1311,10 +1373,18 @@ git commit -m "Add the CV endpoint with an upload cap"
 - Create: `tests/test_api_analysis.py`
 
 **Interfaces:**
-- Consumes: `api.orchestration.analyze_candidates`, `api.schemas.candidate_from_in`
-- Produces: `POST /api/analysis` → `{analyses: CandidateAnalysisOut[], audit: AuditEntryOut[]}`
+- Consumes: `api.orchestration.analyze_candidates`, `api.orchestration.batch_summary_entries`, `api.schemas.candidate_from_in`
+- Produces: `POST /api/analysis`, body `{requirements, candidates, cached_backends}` → `{analyses: CandidateAnalysisOut[], audit: AuditEntryOut[]}`
 
 **Why no cache here:** the client sends only its uncached candidates. The server has no memory of any of them.
+
+**Why `cached_backends` exists:** because of that, the server cannot see the full
+batch — but the audit summary must describe every candidate the user sees, or a
+cached re-run reports "0 Kandidat(en) geprüft". The client sends the backend
+labels of the candidates it served from its own cache, and the server composes
+the summary over both halves. This keeps every German audit string in one place
+rather than duplicating them into TypeScript — which matters for Project 2, where
+they all have to be translated.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1378,13 +1448,42 @@ def test_the_response_carries_the_batch_audit_trail(client):
     assert "Rückfragen generiert" in actions
 
 
-def test_an_empty_candidate_list_is_valid(client):
-    """The client sends only uncached candidates — sometimes that is none."""
+def test_the_summary_counts_the_clients_cached_candidates_too(client):
+    """The client sends only uncached candidates, so it reports the backends of
+    the ones it served from cache. Otherwise the audit trail would describe only
+    part of what the recruiter is looking at."""
+    payload = _payload()
+    payload["cached_backends"] = ["LLM (gpt-4o-mini)", "LLM (gpt-4o-mini)"]
+
+    entries = client.post("/api/analysis", json=payload).json()["audit"]
+
+    summary = next(e for e in entries if e["action"] == "Anforderungsabgleich durchgeführt")
+    assert "3 Kandidat(en)" in summary["detail"]
+    assert "2x LLM (gpt-4o-mini)" in summary["detail"]
+    assert "1x regelbasiert" in summary["detail"]
+
+
+def test_a_fully_cached_rerun_still_reports_every_candidate(client):
+    """The regression this guards: nothing to recompute must not mean "0
+    Kandidat(en) geprüft" while N candidates sit on screen."""
     payload = _payload()
     payload["candidates"] = []
+    payload["cached_backends"] = ["regelbasiert"] * 3
+
     response = client.post("/api/analysis", json=payload)
+
     assert response.status_code == 200
     assert response.json()["analyses"] == []
+    summary = next(
+        e for e in response.json()["audit"] if e["action"] == "Anforderungsabgleich durchgeführt"
+    )
+    assert "3 Kandidat(en)" in summary["detail"]
+
+
+def test_cached_backends_defaults_to_empty(client):
+    """A first run has nothing cached; the field must be optional."""
+    response = client.post("/api/analysis", json=_payload())
+    assert response.status_code == 200
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1400,6 +1499,11 @@ Add to `api/main.py`:
 class AnalysisIn(BaseModel):
     requirements: list[RequirementOut]
     candidates: list[CandidateOut]
+    # Backend labels for the candidates the client served from its own cache.
+    # The server never sees those candidates, but the audit summary has to
+    # count them: a recruiter looking at 3 candidates must not read "0
+    # Kandidat(en) geprüft" just because nothing needed recomputing.
+    cached_backends: list[str] = []
 
 
 class AnalysisOut(BaseModel):
@@ -1417,6 +1521,11 @@ def post_analysis(payload: AnalysisIn) -> AnalysisOut:
     requirements = [requirement_from_in(r) for r in payload.requirements]
     candidates = [candidate_from_in(c) for c in payload.candidates]
     analyses, entries = analyze_candidates(requirements, candidates)
+    entries.extend(
+        batch_summary_entries(
+            requirements, [a.backend for a in analyses] + payload.cached_backends
+        )
+    )
     return AnalysisOut(
         analyses=[
             CandidateAnalysisOut(
