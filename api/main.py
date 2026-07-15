@@ -10,13 +10,23 @@ This module must never import Streamlit.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from typing import Optional
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from agents.dispatch import analyze_job_profile, backend_label
+import llm_agents
+from agents.dispatch import analyze_cv, analyze_job_profile, backend_label
 from api.demo_data import DEMO_CVS, DEMO_JOB
 from api.orchestration import audit_entry, fallback_entries
-from api.schemas import AuditEntryOut, RequirementOut, audit_to_out, requirement_to_out
+from api.schemas import (
+    AuditEntryOut,
+    CandidateOut,
+    RequirementOut,
+    audit_to_out,
+    candidate_to_out,
+    requirement_to_out,
+)
 
 app = FastAPI(title="Recruiting AI API", version="1.0.0")
 
@@ -74,6 +84,62 @@ def post_job_profile(payload: JobProfileIn) -> JobProfileOut:
     )
     return JobProfileOut(
         requirements=[requirement_to_out(r) for r in run.result],
+        audit=[audit_to_out(e) for e in entries],
+        backend=run.backend,
+    )
+
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # pymupdf must not be handed unbounded input
+
+
+class CvOut(BaseModel):
+    candidate: CandidateOut
+    audit: list[AuditEntryOut]
+    backend: str
+
+
+def _upload_to_markdown(upload: UploadFile, data: bytes) -> str:
+    """Read an uploaded PDF or TXT as clean Markdown.
+
+    PDFs go through llm_agents.pdf_to_markdown, which tries pymupdf4llm first
+    and falls back to pypdf itself: Markdown preserves document structure for
+    the LLM while costing far fewer tokens than raw layout text.
+    """
+    if (upload.filename or "").lower().endswith(".pdf"):
+        return llm_agents.pdf_to_markdown(data)
+    try:
+        return llm_agents.clean_markdown(data.decode("utf-8", errors="ignore"))
+    except Exception:
+        return ""
+
+
+@app.post("/api/cv", response_model=CvOut)
+async def post_cv(
+    name: str = Form(...),
+    index: int = Form(0),
+    text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+) -> CvOut:
+    """② CV-Agent: an uploaded or pasted CV -> a structured Candidate."""
+    if file is not None:
+        data = await file.read()
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Datei zu groß (max. 10 MB).")
+        source = file.filename or "upload"
+        cv_text = _upload_to_markdown(file, data)
+    elif text:
+        source = "Eingefügter Text"
+        cv_text = llm_agents.clean_markdown(text)
+    else:
+        raise HTTPException(status_code=422, detail="Weder Datei noch Text übermittelt.")
+
+    run = analyze_cv(name, source, cv_text, index)
+    entries = fallback_entries("CV-Agent", run)
+    entries.append(
+        audit_entry("CV-Agent", "Lebenslauf analysiert", f"{name} verarbeitet (Backend: {run.backend}).")
+    )
+    return CvOut(
+        candidate=candidate_to_out(run.result),
         audit=[audit_to_out(e) for e in entries],
         backend=run.backend,
     )
