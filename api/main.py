@@ -8,11 +8,9 @@ cleared on reload.
 This module must never import Streamlit.
 """
 
-from __future__ import annotations
-
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 import llm_agents
@@ -33,6 +31,33 @@ from api.schemas import (
 )
 
 app = FastAPI(title="Recruiting AI API", version="1.0.0")
+
+import os
+
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+# Locked to the frontend origin. Never "*": with a paid key behind this API,
+# an open CORS policy lets any site spend it from a visitor's browser.
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# MAX_INPUT_CHARS caps the cost of one call; this caps the number of calls.
+# The other half of the mitigation is a hard monthly spend cap on the OpenAI
+# account itself — set it, it is not optional.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+LLM_RATE_LIMIT = os.getenv("LLM_RATE_LIMIT", "30/minute")
 
 
 class BackendOut(BaseModel):
@@ -75,7 +100,8 @@ class JobProfileOut(BaseModel):
 
 
 @app.post("/api/job-profile", response_model=JobProfileOut)
-def post_job_profile(payload: JobProfileIn) -> JobProfileOut:
+@limiter.limit(LLM_RATE_LIMIT)
+def post_job_profile(request: Request, payload: JobProfileIn) -> JobProfileOut:
     """① Stellenprofil-Agent: job ad -> measurable requirements."""
     run = analyze_job_profile(payload.text)
     entries = fallback_entries("Stellenprofil-Agent", run)
@@ -118,7 +144,9 @@ def _upload_to_markdown(upload: UploadFile, data: bytes) -> str:
 
 
 @app.post("/api/cv", response_model=CvOut)
+@limiter.limit(LLM_RATE_LIMIT)
 async def post_cv(
+    request: Request,
     name: str = Form(...),
     index: int = Form(0),
     text: Optional[str] = Form(None),
@@ -165,7 +193,8 @@ class AnalysisOut(BaseModel):
 
 
 @app.post("/api/analysis", response_model=AnalysisOut)
-def post_analysis(payload: AnalysisIn) -> AnalysisOut:
+@limiter.limit(LLM_RATE_LIMIT)
+def post_analysis(request: Request, payload: AnalysisIn) -> AnalysisOut:
     """③④⑤ Matching + gaps + follow-up questions for every candidate sent.
 
     The client sends only the candidates it has no cached result for, so there

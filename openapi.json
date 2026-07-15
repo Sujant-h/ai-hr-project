@@ -1,0 +1,800 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Recruiting AI API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/backend": {
+      "get": {
+        "summary": "Get Backend",
+        "description": "Which backend is active, for the header badge.",
+        "operationId": "get_backend_api_backend_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackendOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/demo": {
+      "get": {
+        "summary": "Get Demo",
+        "description": "Seed data for the \"Demo-Daten laden\" button.",
+        "operationId": "get_demo_api_demo_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/job-profile": {
+      "post": {
+        "summary": "Post Job Profile",
+        "description": "① Stellenprofil-Agent: job ad -> measurable requirements.",
+        "operationId": "post_job_profile_api_job_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cv": {
+      "post": {
+        "summary": "Post Cv",
+        "description": "② CV-Agent: an uploaded or pasted CV -> a structured Candidate.",
+        "operationId": "post_cv_api_cv_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_cv_api_cv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis": {
+      "post": {
+        "summary": "Post Analysis",
+        "description": "③④⑤ Matching + gaps + follow-up questions for every candidate sent.\n\nThe client sends only the candidates it has no cached result for, so there\nis nothing to cache here — and nothing to remember.",
+        "operationId": "post_analysis_api_analysis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/email": {
+      "post": {
+        "summary": "Post Email",
+        "description": "⑤ Draft a follow-up email. Local only — this never reaches OpenAI.\n\nThe draft is never sent automatically; it is prepared for human review.",
+        "operationId": "post_email_api_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisIn": {
+        "properties": {
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementOut"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "cached_backends": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cached Backends",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirements",
+          "candidates"
+        ],
+        "title": "AnalysisIn"
+      },
+      "AnalysisOut": {
+        "properties": {
+          "analyses": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateAnalysisOut"
+            },
+            "type": "array",
+            "title": "Analyses"
+          },
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "type": "array",
+            "title": "Audit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analyses",
+          "audit"
+        ],
+        "title": "AnalysisOut"
+      },
+      "AuditEntryOut": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "agent",
+          "action",
+          "detail"
+        ],
+        "title": "AuditEntryOut"
+      },
+      "BackendOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "BackendOut"
+      },
+      "Body_post_cv_api_cv_post": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "default": 0
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "Body_post_cv_api_cv_post"
+      },
+      "CandidateAnalysisOut": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/CandidateOut"
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate",
+          "backend"
+        ],
+        "title": "CandidateAnalysisOut",
+        "description": "One candidate's analysis plus the backend that produced it.\n\nbackend/fallback_reason are per candidate because the client owns the cache\nand must never store a fallback."
+      },
+      "CandidateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills",
+            "default": []
+          },
+          "years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Years"
+          },
+          "education": {
+            "type": "integer",
+            "title": "Education",
+            "default": 0
+          },
+          "education_label": {
+            "type": "string",
+            "title": "Education Label",
+            "default": "unbekannt"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages",
+            "default": []
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/MatchResultOut"
+            },
+            "type": "array",
+            "title": "Matches",
+            "default": []
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/GapOut"
+            },
+            "type": "array",
+            "title": "Gaps",
+            "default": []
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source",
+          "raw_text"
+        ],
+        "title": "CandidateOut"
+      },
+      "CvOut": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/CandidateOut"
+          },
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "type": "array",
+            "title": "Audit"
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate",
+          "audit",
+          "backend"
+        ],
+        "title": "CvOut"
+      },
+      "DemoCvOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "text"
+        ],
+        "title": "DemoCvOut"
+      },
+      "DemoOut": {
+        "properties": {
+          "job_text": {
+            "type": "string",
+            "title": "Job Text"
+          },
+          "cvs": {
+            "items": {
+              "$ref": "#/components/schemas/DemoCvOut"
+            },
+            "type": "array",
+            "title": "Cvs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_text",
+          "cvs"
+        ],
+        "title": "DemoOut"
+      },
+      "EmailIn": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/CandidateOut"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate",
+          "questions"
+        ],
+        "title": "EmailIn"
+      },
+      "EmailOut": {
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "title": "EmailOut"
+      },
+      "GapOut": {
+        "properties": {
+          "requirement_label": {
+            "type": "string",
+            "title": "Requirement Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "importance": {
+            "type": "string",
+            "enum": [
+              "muss",
+              "kann"
+            ],
+            "title": "Importance",
+            "default": "muss"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirement_label",
+          "description"
+        ],
+        "title": "GapOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobProfileIn": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "JobProfileIn"
+      },
+      "JobProfileOut": {
+        "properties": {
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementOut"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "type": "array",
+            "title": "Audit"
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirements",
+          "audit",
+          "backend"
+        ],
+        "title": "JobProfileOut"
+      },
+      "MatchResultOut": {
+        "properties": {
+          "requirement_id": {
+            "type": "string",
+            "title": "Requirement Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "skill",
+              "experience",
+              "education",
+              "language"
+            ],
+            "title": "Kind"
+          },
+          "importance": {
+            "type": "string",
+            "enum": [
+              "muss",
+              "kann"
+            ],
+            "title": "Importance"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "erfuellt",
+              "teilweise",
+              "offen",
+              "nicht_erfuellt"
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirement_id",
+          "label",
+          "kind",
+          "importance",
+          "status"
+        ],
+        "title": "MatchResultOut"
+      },
+      "RequirementOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "skill",
+              "experience",
+              "education",
+              "language"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Value"
+          },
+          "importance": {
+            "type": "string",
+            "enum": [
+              "muss",
+              "kann"
+            ],
+            "title": "Importance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "value",
+          "importance"
+        ],
+        "title": "RequirementOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
