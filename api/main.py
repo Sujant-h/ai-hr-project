@@ -13,8 +13,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from agents.dispatch import backend_label
+from agents.dispatch import analyze_job_profile, backend_label
 from api.demo_data import DEMO_CVS, DEMO_JOB
+from api.orchestration import audit_entry, fallback_entries
+from api.schemas import AuditEntryOut, RequirementOut, audit_to_out, requirement_to_out
 
 app = FastAPI(title="Recruiting AI API", version="1.0.0")
 
@@ -45,4 +47,33 @@ def get_demo() -> DemoOut:
     return DemoOut(
         job_text=DEMO_JOB,
         cvs=[DemoCvOut(name=name, text=text) for name, text in DEMO_CVS],
+    )
+
+
+class JobProfileIn(BaseModel):
+    text: str
+
+
+class JobProfileOut(BaseModel):
+    requirements: list[RequirementOut]
+    audit: list[AuditEntryOut]
+    backend: str
+
+
+@app.post("/api/job-profile", response_model=JobProfileOut)
+def post_job_profile(payload: JobProfileIn) -> JobProfileOut:
+    """① Stellenprofil-Agent: job ad -> measurable requirements."""
+    run = analyze_job_profile(payload.text)
+    entries = fallback_entries("Stellenprofil-Agent", run)
+    entries.append(
+        audit_entry(
+            "Stellenprofil-Agent",
+            "Stellenprofil analysiert",
+            f"{len(run.result)} Anforderungen erkannt (Backend: {run.backend}).",
+        )
+    )
+    return JobProfileOut(
+        requirements=[requirement_to_out(r) for r in run.result],
+        audit=[audit_to_out(e) for e in entries],
+        backend=run.backend,
     )
