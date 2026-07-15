@@ -47,9 +47,15 @@ nothing in the generated `web/src/api/types.ts` (confirmed: `TS2339`, exit 2):
 | `components['schemas']['CandidateAnalysis']` | `store/session.ts:4` |
 | `components['schemas']['JobRequirement']` | `store/session.ts:5` |
 
-`openapi.json` is current and matches `api/main.py`. `types.ts` is a stale
-generated artifact from an older schema. The regeneration step documented in
-`scripts/export_openapi.py` was never re-run.
+**The generated types are not at fault.** `openapi.json` matches `api/main.py`,
+and `web/src/api/types.ts` is byte-identical to a fresh regeneration from it
+(verified by re-running `openapi-typescript` and diffing). The pipeline in
+`scripts/export_openapi.py` works and has been doing its job.
+
+The four names above are not *stale* — they have **never existed** in this
+schema. `client.ts` and `session.ts` were hand-written against an imagined API
+and never wired to the real one. Nothing needs regenerating; the hand-written
+layer needs replacing with the generated types it already imports and ignores.
 
 **Three endpoints are wrong.**
 
@@ -72,6 +78,14 @@ generated artifact from an older schema. The regeneration step documented in
 | `g.requirement` | `GapOut.requirement_label` |
 | `m.requirement` | `MatchResultOut.label` |
 | `c.filename` | `CandidateOut.name` + `CandidateOut.source` |
+| `activeBackend: 'Rule-Based Sandbox' \| 'LLM Intelligence'` | `BackendOut.label: string`, actual values `"regelbasiert"` or `"LLM (<model>)"` (`agents/dispatch.py:28`) |
+
+The backend label deserves note: `backend_label()` returns a free-form German
+display string, not a union. The two literals the store declares match nothing
+the server can ever send, so even a wired-up `getBackend()` call would leave the
+banner wrong. The banner condition becomes `label === "regelbasiert"` — reliable
+because `dispatch.py:28` returns exactly that string when no LLM is available,
+and an `LLM (...)` string otherwise.
 
 ## Goals
 
@@ -93,14 +107,17 @@ here anyway and splitting them later would mean editing every one twice.
 
 ### 1. Type generation
 
-Add to `web/package.json`:
+`types.ts` is already correct and needs no regeneration. But the two-step
+pipeline (`python scripts/export_openapi.py`, then `openapi-typescript`) is
+undocumented in `package.json` and must be run by hand, which is how the
+hand-written layer drifted from it unnoticed. Add:
 
 ```json
 "gen:types": "python ../scripts/export_openapi.py && openapi-typescript ../openapi.json -o src/api/types.ts"
 ```
 
-`openapi-typescript` is already a devDependency with nothing invoking it. Run it
-once to regenerate `types.ts` from the current schema.
+`openapi-typescript` is already a devDependency with nothing invoking it. The
+script must be a no-op diff on a clean tree; a task verifies that.
 
 The `Literal` unions in `api/schemas.py` (`Status`, `Importance`, `Kind`) become
 TypeScript unions. `schemas.py` states this is deliberate: an unhandled status
