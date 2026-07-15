@@ -34,7 +34,6 @@ import json
 import os
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from functools import lru_cache
 from html import escape  # imported as `escape`: render_spline_embed uses `html` as a local
 from pathlib import Path
@@ -61,13 +60,13 @@ from agents.rules import (
     rueckfragen_agent,
 )
 from api.demo_data import DEMO_CVS, DEMO_JOB
-from models import AuditEntry
+from api.orchestration import audit_entry, fallback_entries
 
 
 def audit_fallback(agent: str, run: AgentRun) -> None:
     """Record an LLM->rules fallback, if one happened, in the audit log."""
-    if run.fallback_reason:
-        audit(agent, "LLM-Fehler — Fallback auf Regeln", run.fallback_reason)
+    for entry in fallback_entries(agent, run):
+        st.session_state.audit.append(entry)
 
 
 
@@ -75,14 +74,7 @@ def audit_fallback(agent: str, run: AgentRun) -> None:
 
 def audit(agent: str, action: str, detail: str = "") -> None:
     """Append a tamper-evident processing record to the audit log."""
-    st.session_state.audit.append(
-        AuditEntry(
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            agent=agent,
-            action=action,
-            detail=detail,
-        )
-    )
+    st.session_state.audit.append(audit_entry(agent, action, detail))
 
 
 # --- Parallelism & caching --------------------------------------------------
