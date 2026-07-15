@@ -13,6 +13,7 @@ import pytest
 
 import app
 import llm_agents
+from api import orchestration
 from models import Requirement
 
 
@@ -28,22 +29,22 @@ def test_results_keep_input_order_not_completion_order(monkeypatch):
         time.sleep((5 - n) * 0.02)
         return n
 
-    assert app._run_parallel(slow_for_early_items, [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
+    assert orchestration._run_parallel(slow_for_early_items, [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
 
 
 def test_empty_input_is_handled():
-    assert app._run_parallel(lambda x: x, []) == []
+    assert orchestration._run_parallel(lambda x: x, []) == []
 
 
 def test_single_item_runs_inline(monkeypatch):
     monkeypatch.setattr(llm_agents, "llm_available", lambda: True)
-    assert app._run_parallel(lambda x: x * 2, [21]) == [42]
+    assert orchestration._run_parallel(lambda x: x * 2, [21]) == [42]
 
 
 def test_rule_based_backend_runs_inline(monkeypatch):
     """No I/O to overlap without an API key — threads would only add overhead."""
     monkeypatch.setattr(llm_agents, "llm_available", lambda: False)
-    assert app._run_parallel(lambda x: x + 1, [1, 2, 3]) == [2, 3, 4]
+    assert orchestration._run_parallel(lambda x: x + 1, [1, 2, 3]) == [2, 3, 4]
 
 
 def test_exceptions_propagate(monkeypatch):
@@ -53,7 +54,7 @@ def test_exceptions_propagate(monkeypatch):
         raise ValueError("boom")
 
     with pytest.raises(ValueError):
-        app._run_parallel(boom, [1, 2])
+        orchestration._run_parallel(boom, [1, 2])
 
 
 # --- cache keys --------------------------------------------------------------
