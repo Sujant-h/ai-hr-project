@@ -78,6 +78,10 @@ class MatchResult:
 class Gap:
     requirement_label: str
     description: str
+    # Carried over from the requirement that produced the gap, so the UI can
+    # tell a missing must-have apart from a missing nice-to-have instead of
+    # asking the candidate about both with equal urgency.
+    importance: Importance = "muss"
 
 
 @dataclass

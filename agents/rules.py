@@ -322,17 +322,24 @@ def matching_agent(candidate: Candidate, requirements: list) -> list:
 # --- Agent 4: Informationslücken-Agent --------------------------------------
 
 def informationsluecken_agent(candidate: Candidate, matches: list) -> list:
-    """Identify missing or unclear information that blocks a clean assessment."""
+    """Identify missing or unclear information that blocks a clean assessment.
+
+    Gaps on nice-to-have requirements are kept but marked "kann": they are worth
+    showing the recruiter, yet asking a candidate about them as insistently as
+    about a must-have turns the follow-up e-mail into noise. Must-haves come
+    first for the same reason.
+    """
     gaps: list = []
     for m in matches:
         if m.status in ("offen", "teilweise"):
-            gaps.append(Gap(requirement_label=m.label, description=m.note))
+            gaps.append(Gap(requirement_label=m.label, description=m.note, importance=m.importance))
 
     if not candidate.email:
         gaps.append(Gap(requirement_label="Kontaktdaten", description="Keine E-Mail-Adresse im Lebenslauf gefunden."))
     if candidate.years is None:
         gaps.append(Gap(requirement_label="Berufserfahrung", description="Dauer der Berufserfahrung unklar."))
 
+    gaps.sort(key=lambda g: g.importance != "muss")  # stable: muss first
     return gaps
 
 

@@ -54,6 +54,7 @@ from agents.dispatch import (
     match_candidate,
     summarize_backends,
 )
+from agents import rules
 from agents.rules import (
     generate_email,
     informationsluecken_agent,
@@ -311,6 +312,12 @@ def _h(value: object) -> str:
     Only the data needs escaping; the app's own static markup is trusted.
     """
     return escape(str(value))
+
+
+def _kann_marker(gap) -> str:
+    """Mark a gap that came from a nice-to-have, so a missing optional skill does
+    not read like a missing hard requirement."""
+    return " *(Kann-Anforderung)*" if gap.importance == "kann" else ""
 
 
 def _logo_data_uri() -> Optional[str]:
@@ -811,6 +818,20 @@ def render_workspace() -> None:
         unsafe_allow_html=True,
     )
 
+    # Be explicit about which backend is running. The rule-based fallback only
+    # knows a fixed keyword list, so on real CVs it silently under-extracts —
+    # saying so is more honest (and more useful) than quietly returning thin
+    # results that look like a complete analysis.
+    if not llm_agents.llm_available():
+        st.warning(
+            "**Kein `OPENAI_API_KEY` gesetzt — die Agenten laufen regelbasiert.** "
+            f"Der regelbasierte Fallback kennt nur eine feste Stichwortliste "
+            f"({len(rules.SKILL_VOCAB)} Skills, {len(rules.LANGUAGE_VOCAB)} Sprachen) "
+            "und ist für die Demo gedacht: Bei echten Lebensläufen übersieht er "
+            "Qualifikationen, die nicht auf der Liste stehen. Für belastbare "
+            "Ergebnisse `OPENAI_API_KEY` setzen — dann übernimmt der LLM-Backend."
+        )
+
     # Quick action: load demo data
     a1, a2 = st.columns([1, 3])
     with a1:
@@ -999,7 +1020,7 @@ def render_workspace() -> None:
                     any_gap = True
                     st.markdown(f"**{cand.name}** — {len(cand.gaps)} Lücke(n)")
                     for g in cand.gaps:
-                        st.markdown(f"- **{g.requirement_label}** — {g.description}")
+                        st.markdown(f"- **{g.requirement_label}**{_kann_marker(g)} — {g.description}")
                     st.markdown("")
             if not any_gap:
                 st.success("Keine Informationslücken erkannt.")
@@ -1149,7 +1170,7 @@ def render_candidate_detail() -> None:
     if cand.gaps:
         st.markdown("#### 🧩 Informationslücken")
         for g in cand.gaps:
-            st.markdown(f"- **{g.requirement_label}** — {g.description}")
+            st.markdown(f"- **{g.requirement_label}**{_kann_marker(g)} — {g.description}")
     if cand.questions:
         st.markdown("#### 💬 Vorgeschlagene Rückfragen")
         for q in cand.questions:
