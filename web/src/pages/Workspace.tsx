@@ -94,7 +94,7 @@ export const Workspace: React.FC = () => {
         </div>
 
         <div className="ws-head">
-          <div className="ws-copy section" style={{ margin: 0 }}>
+          <div className="ws-copy section">
             <span className="eyebrow">Recruiting Workspace</span>
             <h2 style={{ fontSize: 'clamp(1.7rem,3.4vw,2.6rem)' }}>Dein Screening-Arbeitsbereich</h2>
             <p className="lead" style={{ marginBottom: '30px' }}>
