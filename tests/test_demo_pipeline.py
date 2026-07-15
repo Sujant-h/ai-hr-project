@@ -6,15 +6,15 @@ state. It runs every agent in sequence and asserts the contract the UI relies on
 
 from __future__ import annotations
 
-import app
+from api.demo_data import DEMO_CVS, DEMO_JOB
 from agents import rules
 from models import EDU_LEVELS
 
 
 def _run_pipeline():
-    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(DEMO_JOB)
     candidates = [
-        rules.cv_agent(name, "Demo-Daten", text, i) for i, (name, text) in enumerate(app.DEMO_CVS)
+        rules.cv_agent(name, "Demo-Daten", text, i) for i, (name, text) in enumerate(DEMO_CVS)
     ]
     for cand in candidates:
         cand.matches = rules.matching_agent(cand, requirements)
@@ -24,7 +24,7 @@ def _run_pipeline():
 
 
 def test_demo_job_yields_the_expected_requirements():
-    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(DEMO_JOB)
     labels = {r.label for r in requirements}
 
     assert {"Python", "SQL", "AWS", "Docker"} <= labels
@@ -35,7 +35,7 @@ def test_demo_job_yields_the_expected_requirements():
 
 def test_demo_job_marks_scrum_line_as_optional():
     """'Projektmanagement und Scrum wünschenswert' is a nice-to-have."""
-    requirements = rules.stellenprofil_agent(app.DEMO_JOB)
+    requirements = rules.stellenprofil_agent(DEMO_JOB)
     pm = next(r for r in requirements if r.label == "Projektmanagement")
     assert pm.importance == "kann"
 
