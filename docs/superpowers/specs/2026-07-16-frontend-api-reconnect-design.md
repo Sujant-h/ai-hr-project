@@ -18,8 +18,27 @@ deliberately open to see.
 
 ### Evidence
 
-**The build is broken.** `npm run build` runs `tsc -b && vite build`. These five
-references resolve to nothing in the generated `web/src/api/types.ts`:
+**The build is broken — twice over.** `npm run build` runs `tsc -b && vite build`;
+`tsc -b` exits 2. There are two independent blockers, and the first masks the
+second.
+
+*Blocker 1 — the config.* `tsc` refuses the project before typechecking a single
+file:
+
+```
+tsconfig.app.json:3:5 - error TS5101: Option 'baseUrl' is deprecated and will
+stop functioning in TypeScript 7.0. Specify compilerOption
+'"ignoreDeprecations": "6.0"' to silence this error.
+```
+
+`package.json` pins `typescript: ~6.0.2`, where `baseUrl` is deprecated. Fix by
+dropping `baseUrl` from `tsconfig.app.json` and letting the `paths` alias for
+`@/*` resolve relative to the config file, which is the TS 6 behaviour and needs
+no `baseUrl`. Do **not** silence it with `ignoreDeprecations` — that only defers
+the same failure to TypeScript 7.
+
+*Blocker 2 — the types.* Once the config parses, five references resolve to
+nothing in the generated `web/src/api/types.ts` (confirmed: `TS2339`, exit 2):
 
 | Reference | Site |
 |---|---|
@@ -56,7 +75,7 @@ generated artifact from an older schema. The regeneration step documented in
 
 ## Goals
 
-1. `npm run build` passes.
+1. `npm run build` passes — both blockers cleared.
 2. A full screening run completes against the real backend: job profile →
    CV upload (PDF and .txt) → analysis → candidate detail → email draft.
 3. Types are generated from the Python schema, not hand-written, so they cannot
