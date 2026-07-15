@@ -1,20 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useSessionStore } from '../store/session';
-import { SplineScene } from './SplineScene';
-import { ChevronDown } from 'lucide-react';
 
 export const Intro: React.FC = () => {
   const { hasSeenIntro, setHasSeenIntro } = useSessionStore();
   const [isLifting, setIsLifting] = useState(false);
 
-  // If already seen, we just don't render it at all.
+  useEffect(() => {
+    // Load spline-viewer script dynamically
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = 'https://unpkg.com/@splinetool/viewer@1.9.48/build/spline-viewer.js';
+    document.head.appendChild(script);
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+
   if (hasSeenIntro) return null;
 
   const handleLift = () => {
     setIsLifting(true);
     setTimeout(() => {
       setHasSeenIntro(true);
-    }, 850); // wait for CSS transition
+    }, 850);
   };
 
   return (
@@ -30,16 +38,23 @@ export const Intro: React.FC = () => {
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'transform .85s cubic-bezier(.76,0,.24,1), opacity .85s ease',
-        background: 'radial-gradient(circle at center, #1a1528 0%, #09080d 100%)',
+        background: 'linear-gradient(180deg,#fbfbff 0%, #f1f2fb 100%)',
         zIndex: 9999,
       }}
     >
-      {/* 
-        Spline scene fills the background.
-        Because it contains an interactive element, we place an absolute overlay
-        (catcher) on top of it so the user can click anywhere to lift the hero.
-      */}
-      <SplineScene />
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        width: '100vw',
+        height: '100vh',
+        transform: 'translate(-43%,-50%) scale(1.7)',
+        transformOrigin: 'center center'
+      }}>
+        {/* @ts-ignore */}
+        <spline-viewer url="https://prod.spline.design/Ji0hiX2hb-mU5zX1/scene.splinecode" events-target="global"></spline-viewer>
+      </div>
+
       <div
         className="catcher"
         style={{
@@ -59,7 +74,7 @@ export const Intro: React.FC = () => {
           right: 0,
           margin: '0 auto',
           width: 'max-content',
-          color: '#d1cbf5',
+          color: '#6b5bd0',
           fontSize: '.76rem',
           letterSpacing: '.2em',
           textTransform: 'uppercase',
@@ -73,12 +88,12 @@ export const Intro: React.FC = () => {
           pointerEvents: 'none',
         }}
       >
-        <span>SCROLL TO EXPLORE</span>
+        <span>Scroll to Explore</span>
         <div style={{
           width: '18px',
           height: '18px',
-          borderRight: '2px solid #d1cbf5',
-          borderBottom: '2px solid #d1cbf5',
+          borderRight: '2px solid #6b5bd0',
+          borderBottom: '2px solid #6b5bd0',
           transform: 'rotate(45deg)',
           animation: 'bob 1.8s infinite ease-in-out'
         }} />
