@@ -360,7 +360,7 @@ def render_intro() -> None:
       .hero{
         position:relative; height:100vh; width:100vw; overflow:hidden; cursor:pointer;
         transition:transform .85s cubic-bezier(.76,0,.24,1), opacity .85s ease;
-        background:linear-gradient(180deg,#fbfbff 0%, #f1f2fb 100%);
+        background: radial-gradient(circle at center, #1a1528 0%, #09080d 100%);
       }
       .hero.lift{ transform:translateY(-100%); opacity:0; }
       /* Spline graphic fills the entire viewport, scaled up to "cover" the
@@ -382,12 +382,12 @@ def render_intro() -> None:
       .catcher{position:absolute; inset:0; z-index:3; background:transparent;}
       .scroll{
         position:absolute; bottom:6vh; left:0; right:0; margin:0 auto; width:max-content;
-        color:#6b5bd0; font-size:.76rem; letter-spacing:.2em; text-transform:uppercase;
+        color:#d1cbf5; font-size:.76rem; letter-spacing:.2em; text-transform:uppercase;
         display:flex; flex-direction:column; align-items:center; gap:10px; cursor:pointer;
         animation:fadeUp 1.1s ease both .4s; z-index:4; pointer-events:none;
       }
-      .arrow{ width:18px;height:18px;border-right:2px solid #6b5bd0;
-        border-bottom:2px solid #6b5bd0; transform:rotate(45deg);
+      .arrow{ width:18px;height:18px;border-right:2px solid #d1cbf5;
+        border-bottom:2px solid #d1cbf5; transform:rotate(45deg);
         animation:bob 1.8s infinite ease-in-out; }
       @keyframes bob{0%,100%{transform:rotate(45deg) translate(0,0);opacity:.4;}
         50%{transform:rotate(45deg) translate(4px,4px);opacity:1;}}
