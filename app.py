@@ -29,8 +29,11 @@ judgement is always left to a human recruiter.
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import os
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import lru_cache
 from html import escape  # imported as `escape`: render_spline_embed uses `html` as a local
@@ -80,6 +83,59 @@ def audit(agent: str, action: str, detail: str = "") -> None:
     )
 
 
+# --- Parallelism & caching --------------------------------------------------
+#
+# Each LLM call is an independent HTTP request that can take seconds, and the
+# agents are pure, so candidates can be processed concurrently instead of one
+# after another. Two rules keep this safe:
+#
+#   * Only the dispatchers run on worker threads. Streamlit's session state is
+#     not thread-safe, so audit(), the cache and every st.* call stay on the
+#     main thread — which is exactly why the dispatchers were made pure.
+#   * Results are re-ordered back onto the input order, never zipped by
+#     completion time.
+#
+# The cache is keyed on content, not identity: at temperature=0 the same CV and
+# the same requirements always yield the same answer, so re-running an analysis
+# should cost nothing. Only successful runs are cached — caching a fallback
+# would pin a candidate to rule-based results for the rest of the session
+# because of one transient API timeout.
+
+MAX_PARALLEL_CALLS = 4  # keep well clear of API rate limits
+
+
+def _run_parallel(fn, items: list) -> list:
+    """Map `fn` over `items`, concurrently when that can actually help.
+
+    Results are returned in the order of `items`. With the rule-based backend
+    there is no I/O to overlap, so the work runs inline.
+    """
+    if len(items) <= 1 or not llm_agents.llm_available():
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=min(len(items), MAX_PARALLEL_CALLS)) as pool:
+        return list(pool.map(fn, items))  # pool.map preserves input order
+
+
+def requirements_key(requirements: list) -> str:
+    """A stable content key for a set of requirements."""
+    payload = [(r.id, r.kind, str(r.value), r.importance) for r in requirements]
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+
+def cache_key(*parts: str) -> str:
+    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
+
+
+def cache_get(key: str):
+    return st.session_state.analysis_cache.get(key)
+
+
+def cache_put(key: str, run: AgentRun) -> None:
+    """Cache a successful run. Fallbacks are deliberately not cached."""
+    if run.fallback_reason is None:
+        st.session_state.analysis_cache[key] = run
+
+
 # --- Utilities --------------------------------------------------------------
 
 def extract_text_from_upload(uploaded_file) -> str:
@@ -101,10 +157,22 @@ def extract_text_from_upload(uploaded_file) -> str:
 def run_full_analysis() -> None:
     """Run the matching, gap and follow-up agents for every candidate."""
     reqs = st.session_state.requirements
-    backends: list = []
-    for cand in st.session_state.candidates:
-        run = match_candidate(cand, reqs)
+    candidates = st.session_state.candidates
+    reqs_key = requirements_key(reqs)
+    keys = [cache_key(cand.raw_text, reqs_key) for cand in candidates]
+
+    # Only candidates without a cached result reach the API, and they go in
+    # parallel rather than one round-trip after another.
+    todo = [cand for cand, key in zip(candidates, keys) if cache_get(key) is None]
+    fresh = _run_parallel(lambda cand: match_candidate(cand, reqs), todo)
+    for cand, run in zip(todo, fresh):
         audit_fallback("Matching-Agent", run)
+        cache_put(cache_key(cand.raw_text, reqs_key), run)
+    by_candidate_id = {id(cand): run for cand, run in zip(todo, fresh)}
+
+    backends: list = []
+    for cand, key in zip(candidates, keys):
+        run = by_candidate_id.get(id(cand)) or cache_get(key)
         cand.matches = run.result
         backends.append(run.backend)
         cand.gaps = informationsluecken_agent(cand, cand.matches)
@@ -112,7 +180,7 @@ def run_full_analysis() -> None:
     audit(
         "Matching-Agent",
         "Anforderungsabgleich durchgeführt",
-        f"{len(st.session_state.candidates)} Kandidat(en) gegen {len(reqs)} "
+        f"{len(candidates)} Kandidat(en) gegen {len(reqs)} "
         f"Anforderung(en) geprüft (Backend: {summarize_backends(backends)}).",
     )
     audit("Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt.")
@@ -207,6 +275,8 @@ def init_state() -> None:
         "selected_candidate": None,
         "email_drafts": {},
         "intro_done": False,
+        # content-hash -> AgentRun, so re-running an analysis costs nothing
+        "analysis_cache": {},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -818,27 +888,31 @@ def render_workspace() -> None:
         )
 
         if st.button("📑 Bewerbungen analysieren", type="primary"):
-            new_candidates = []
-            backends: list = []
             idx = len(st.session_state.candidates)
             with st.spinner(f"CV-Agent strukturiert die Lebensläufe … (Backend: {backend_label()})"):
-                if uploaded:
-                    for f in uploaded:
-                        # PDF -> Markdown BEFORE the LLM sees anything (token
-                        # optimization + structure preservation)
-                        text = extract_text_from_upload(f)
-                        base_name = f.name.rsplit(".", 1)[0]
-                        run = analyze_cv(base_name, f.name, text, idx)
-                        audit_fallback("CV-Agent", run)
-                        backends.append(run.backend)
-                        new_candidates.append(run.result)
-                        idx += 1
+                # Read every upload here, on the main thread: Streamlit's
+                # UploadedFile is not safe to touch from a worker. PDF ->
+                # Markdown happens BEFORE the LLM sees anything (token
+                # optimization + structure preservation).
+                docs = [
+                    (f.name.rsplit(".", 1)[0], f.name, extract_text_from_upload(f))
+                    for f in (uploaded or [])
+                ]
                 if manual.strip():
-                    run = analyze_cv(f"Kandidat {idx + 1}", "Manuelle Eingabe", manual, idx)
-                    audit_fallback("CV-Agent", run)
-                    backends.append(run.backend)
-                    new_candidates.append(run.result)
-                    idx += 1
+                    docs.append((f"Kandidat {idx + len(docs) + 1}", "Manuelle Eingabe", manual))
+
+                def _analyze(item):
+                    offset, (name, source, text) = item
+                    return analyze_cv(name, source, text, idx + offset)
+
+                runs = _run_parallel(_analyze, list(enumerate(docs)))
+
+            new_candidates = []
+            backends: list = []
+            for run in runs:
+                audit_fallback("CV-Agent", run)
+                backends.append(run.backend)
+                new_candidates.append(run.result)
 
             if new_candidates:
                 st.session_state.candidates.extend(new_candidates)
