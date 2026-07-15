@@ -18,13 +18,16 @@ from pydantic import BaseModel
 import llm_agents
 from agents.dispatch import analyze_cv, analyze_job_profile, backend_label
 from api.demo_data import DEMO_CVS, DEMO_JOB
-from api.orchestration import audit_entry, fallback_entries
+from api.orchestration import analyze_candidates, audit_entry, batch_summary_entries, fallback_entries
 from api.schemas import (
     AuditEntryOut,
+    CandidateAnalysisOut,
     CandidateOut,
     RequirementOut,
     audit_to_out,
+    candidate_from_in,
     candidate_to_out,
+    requirement_from_in,
     requirement_to_out,
 )
 
@@ -142,4 +145,47 @@ async def post_cv(
         candidate=candidate_to_out(run.result),
         audit=[audit_to_out(e) for e in entries],
         backend=run.backend,
+    )
+
+
+class AnalysisIn(BaseModel):
+    requirements: list[RequirementOut]
+    candidates: list[CandidateOut]
+    # Backend labels for the candidates the client served from its own cache.
+    # The server never sees those candidates, but the audit summary has to
+    # count them: a recruiter looking at 3 candidates must not read "0
+    # Kandidat(en) geprüft" just because nothing needed recomputing.
+    cached_backends: list[str] = []
+
+
+class AnalysisOut(BaseModel):
+    analyses: list[CandidateAnalysisOut]
+    audit: list[AuditEntryOut]
+
+
+@app.post("/api/analysis", response_model=AnalysisOut)
+def post_analysis(payload: AnalysisIn) -> AnalysisOut:
+    """③④⑤ Matching + gaps + follow-up questions for every candidate sent.
+
+    The client sends only the candidates it has no cached result for, so there
+    is nothing to cache here — and nothing to remember.
+    """
+    requirements = [requirement_from_in(r) for r in payload.requirements]
+    candidates = [candidate_from_in(c) for c in payload.candidates]
+    analyses, entries = analyze_candidates(requirements, candidates)
+    entries.extend(
+        batch_summary_entries(
+            requirements, [a.backend for a in analyses] + payload.cached_backends
+        )
+    )
+    return AnalysisOut(
+        analyses=[
+            CandidateAnalysisOut(
+                candidate=candidate_to_out(a.candidate),
+                backend=a.backend,
+                fallback_reason=a.fallback_reason,
+            )
+            for a in analyses
+        ],
+        audit=[audit_to_out(e) for e in entries],
     )
