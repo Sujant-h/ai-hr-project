@@ -33,7 +33,7 @@ export function Reveal({ children, delay = 0, className }: RevealProps) {
           io.disconnect();
         }
       },
-      { rootMargin: '0px 0px -100px 0px' },
+      { rootMargin: '0px 0px 0px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
