@@ -8,3 +8,6 @@ pymupdf4llm==1.28.0
 fastapi==0.121.2
 uvicorn==0.42.0
 slowapi==0.1.9
+# Required by the multipart Form/UploadFile handling in api/main.py:/api/cv.
+# Without it FastAPI raises at import time and the app cannot start at all.
+python-multipart==0.0.20

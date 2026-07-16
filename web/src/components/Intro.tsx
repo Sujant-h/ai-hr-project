@@ -27,7 +27,6 @@ export const Intro: React.FC = () => {
 
   return (
     <div
-      className={`hero ${isLifting ? 'lift' : ''}`}
       onClick={handleLift}
       style={{
         position: 'fixed',
@@ -38,6 +37,10 @@ export const Intro: React.FC = () => {
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'transform .85s cubic-bezier(.76,0,.24,1), opacity .85s ease',
+        // Was driven by .hero/.lift in App.css, which is deleted. Inlined so the
+        // click-to-dismiss lift still works. Spec B replaces this component.
+        transform: isLifting ? 'translateY(-100%)' : 'none',
+        opacity: isLifting ? 0 : 1,
         background: 'linear-gradient(180deg,#fbfbff 0%, #f1f2fb 100%)',
         zIndex: 9999,
       }}
@@ -83,7 +86,6 @@ export const Intro: React.FC = () => {
           alignItems: 'center',
           gap: '10px',
           cursor: 'pointer',
-          animation: 'fadeUp 1.1s ease both .4s',
           zIndex: 4,
           pointerEvents: 'none',
         }}
@@ -95,7 +97,6 @@ export const Intro: React.FC = () => {
           borderRight: '2px solid #6b5bd0',
           borderBottom: '2px solid #6b5bd0',
           transform: 'rotate(45deg)',
-          animation: 'bob 1.8s infinite ease-in-out'
         }} />
       </div>
     </div>
