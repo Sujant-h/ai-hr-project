@@ -81,14 +81,14 @@ export function Workspace() {
           <Tabs.Root value={active} onValueChange={onValueChange}>
             <Tabs.List
               aria-label="Screening-Schritte"
-              className="hide-scrollbar mb-8 flex overflow-x-auto border-b border-slate-200"
+              className="hide-scrollbar -mx-6 mb-8 flex snap-x snap-mandatory overflow-x-auto border-b border-slate-200 px-6 sm:mx-0 sm:snap-none sm:px-0"
             >
               {TABS.map((tab) => (
                 <Tabs.Trigger
                   key={tab.slug}
                   value={tab.slug}
                   className={cn(
-                    '-mb-[1px] whitespace-nowrap border-b-2 px-6 py-4 text-[15px] font-semibold transition-all',
+                    'snap-start -mb-[1px] whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition-all sm:px-6 sm:py-4 sm:text-[15px]',
                     'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
                     'rounded-t-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
                     'data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700',
