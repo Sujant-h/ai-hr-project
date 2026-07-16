@@ -1,108 +1,78 @@
 import { create } from 'zustand';
-import type { components } from '../api/types';
+import type {
+  AuditEntryOut,
+  CandidateAnalysisOut,
+  CandidateOut,
+  RequirementOut,
+} from '../api/client';
 
-type CandidateAnalysis = components['schemas']['CandidateAnalysis'];
-type JobRequirement = components['schemas']['JobRequirement'];
-type PipelineResult = components['schemas']['PipelineResult'];
-
-export interface AuditLogEntry {
-  timestamp: string;
-  agent: string;
-  action: string;
-  detail: string;
-}
+/**
+ * agents/dispatch.py:28 returns exactly "regelbasiert" when no LLM is
+ * configured, and "LLM (<model>)" otherwise. It is a free-form German display
+ * string, not a union — so the label is stored as-is and the boolean derived.
+ */
+const RULE_BASED_LABEL = 'regelbasiert';
 
 interface SessionState {
-  hasSeenIntro: boolean;
-  activeBackend: 'Rule-Based Sandbox' | 'LLM Intelligence';
-  
-  jobProfile: {
-    rawText: string;
-    parsedProfile: {
-      requirements?: JobRequirement[];
-      [key: string]: any;
-    } | null;
-  };
-  
-  candidates: Array<{
-    filename: string;
-    content: string;
-  }>;
-  
-  analysisResult: PipelineResult | null;
+  backendLabel: string | null;
+  isLlmActive: boolean;
+  jobText: string;
+  requirements: RequirementOut[];
+  candidates: CandidateOut[];
+  analyses: CandidateAnalysisOut[];
   isAnalyzing: boolean;
-  
-  auditLog: AuditLogEntry[];
+  auditLog: AuditEntryOut[];
   selectedCandidateId: string | null;
+  error: string | null;
 
-  setHasSeenIntro: (seen: boolean) => void;
-  setActiveBackend: (backend: 'Rule-Based Sandbox' | 'LLM Intelligence') => void;
-  
-  setJobProfileText: (text: string) => void;
-  setParsedJobProfile: (profile: any) => void;
-  
-  addCandidate: (filename: string, content: string) => void;
-  removeCandidate: (filename: string) => void;
-  clearCandidates: () => void;
-  
-  setAnalysisResult: (result: PipelineResult | null) => void;
+  setBackendLabel: (label: string) => void;
+  setJobText: (text: string) => void;
+  setRequirements: (requirements: RequirementOut[]) => void;
+  addCandidate: (candidate: CandidateOut) => void;
+  removeCandidate: (id: string) => void;
+  setAnalyses: (analyses: CandidateAnalysisOut[]) => void;
   setIsAnalyzing: (isAnalyzing: boolean) => void;
-
-  addAuditLogEntry: (agent: string, action: string, detail: string) => void;
+  appendAudit: (entries: AuditEntryOut[]) => void;
   clearAuditLog: () => void;
   setSelectedCandidateId: (id: string | null) => void;
+  setError: (error: string | null) => void;
+  reset: () => void;
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
-  hasSeenIntro: false,
-  activeBackend: 'Rule-Based Sandbox',
-  
-  jobProfile: {
-    rawText: '',
-    parsedProfile: null,
-  },
-  
+const initial = {
+  backendLabel: null,
+  isLlmActive: false,
+  jobText: '',
+  requirements: [],
   candidates: [],
-  
-  analysisResult: null,
+  analyses: [],
   isAnalyzing: false,
-
   auditLog: [],
   selectedCandidateId: null,
+  error: null,
+} satisfies Partial<SessionState>;
 
-  setHasSeenIntro: (seen) => set({ hasSeenIntro: seen }),
-  setActiveBackend: (backend) => set({ activeBackend: backend }),
-  
-  setJobProfileText: (text) => set((state) => ({
-    jobProfile: { ...state.jobProfile, rawText: text }
-  })),
-  setParsedJobProfile: (profile) => set((state) => ({
-    jobProfile: { ...state.jobProfile, parsedProfile: profile }
-  })),
-  
-  addCandidate: (filename, content) => set((state) => ({
-    candidates: [...state.candidates, { filename, content }]
-  })),
-  removeCandidate: (filename) => set((state) => ({
-    candidates: state.candidates.filter(c => c.filename !== filename)
-  })),
-  clearCandidates: () => set({ candidates: [] }),
-  
-  setAnalysisResult: (result) => set({ analysisResult: result }),
+/**
+ * In memory only. README.md:436 and the api/main.py docstring both promise that
+ * no candidate data is persisted and that everything is cleared on reload.
+ * Do not add zustand's persist middleware.
+ */
+export const useSessionStore = create<SessionState>((set) => ({
+  ...initial,
+
+  setBackendLabel: (label) =>
+    set({ backendLabel: label, isLlmActive: label !== RULE_BASED_LABEL }),
+  setJobText: (jobText) => set({ jobText }),
+  setRequirements: (requirements) => set({ requirements }),
+  addCandidate: (candidate) => set((s) => ({ candidates: [...s.candidates, candidate] })),
+  removeCandidate: (id) => set((s) => ({ candidates: s.candidates.filter((c) => c.id !== id) })),
+  setAnalyses: (analyses) => set({ analyses }),
   setIsAnalyzing: (isAnalyzing) => set({ isAnalyzing }),
-
-  addAuditLogEntry: (agent, action, detail) => set((state) => {
-    const timeFormatter = new Intl.DateTimeFormat('de-DE', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3
-    });
-    const newEntry = {
-      timestamp: timeFormatter.format(new Date()),
-      agent,
-      action,
-      detail
-    };
-    return { auditLog: [...state.auditLog, newEntry] };
-  }),
+  // Entries come from the server on every response: the backend already records
+  // which agent ran and why a fallback happened. The client does not invent them.
+  appendAudit: (entries) => set((s) => ({ auditLog: [...s.auditLog, ...entries] })),
   clearAuditLog: () => set({ auditLog: [] }),
-  setSelectedCandidateId: (id) => set({ selectedCandidateId: id }),
+  setSelectedCandidateId: (selectedCandidateId) => set({ selectedCandidateId }),
+  setError: (error) => set({ error }),
+  reset: () => set(initial),
 }));
