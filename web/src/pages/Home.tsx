@@ -46,21 +46,16 @@ export const Home: React.FC = () => {
 
         {/* 1) Hero — robot Spline behind the headline */}
         <div className="relative w-full h-[100vh] min-h-[640px] -mt-4">
-          <SplineScene
-            url="https://prod.spline.design/Ji0hiX2hb-mU5zX1/scene.splinecode"
-            eager
-            className="absolute inset-0 z-0 overflow-hidden [mask-image:linear-gradient(to_bottom,black_55%,transparent_92%)]"
-            poster={
-              <div
-                aria-hidden="true"
-                className="absolute inset-0"
-                style={{
-                  background:
-                    'radial-gradient(1100px 700px at 72% 38%, rgba(124,92,255,.22), transparent 60%), radial-gradient(900px 600px at 60% 20%, rgba(59,130,246,.18), transparent 58%), linear-gradient(180deg,#fbfbff 0%, #f1f2fb 100%)',
-                }}
-              />
-            }
-          />
+          <div className="absolute inset-0 z-0 overflow-hidden [mask-image:linear-gradient(to_bottom,black_55%,transparent_92%)]">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(1100px 700px at 72% 38%, rgba(124,92,255,.22), transparent 60%), radial-gradient(900px 600px at 60% 20%, rgba(59,130,246,.18), transparent 58%), linear-gradient(180deg,#fbfbff 0%, #f1f2fb 100%)',
+              }}
+            />
+          </div>
           {/* Left-side legibility wash over the scene. */}
           <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-50 via-slate-50/70 to-transparent"></div>
 
