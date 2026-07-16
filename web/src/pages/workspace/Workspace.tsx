@@ -7,6 +7,8 @@ import { AuditLog } from '../../components/AuditLog';
 import { CandidateDetail } from '../../components/CandidateDetail';
 import { ErrorBanner } from './ErrorBanner';
 import { JobProfileTab } from './JobProfileTab';
+import { CandidatesTab } from './CandidatesTab';
+import { GapsTab } from './GapsTab';
 
 const TABS = [
   { id: 1, label: '① Stellenprofil' },
@@ -85,6 +87,8 @@ export function Workspace() {
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 1 && <JobProfileTab />}
+                {activeTab === 3 && <CandidatesTab />}
+                {activeTab === 4 && <GapsTab />}
                 {activeTab === 6 && <AuditLog />}
               </motion.div>
             </AnimatePresence>
