@@ -66,7 +66,7 @@ export const Home: React.FC = () => {
         </div>
 
         {/* Secondary Spline band — lazy, below the fold */}
-        <div className="relative w-full h-[420px] -mt-[15vh] z-30 pointer-events-none">
+        <div className="hidden md:block relative w-full h-[280px] -mt-[10vh] mb-[-60px] z-30 pointer-events-none">
           <SplineScene
             url="https://prod.spline.design/4PF4J4YenOXJHe4A/scene.splinecode"
             className="absolute inset-0 [mask-image:linear-gradient(180deg,transparent_0%,#000_22%,#000_78%,transparent_100%)]"
