@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    // No baseUrl: it is deprecated in TypeScript 6 and errors under the pinned
+    // ~6.0.2. Under TS6 `paths` resolves relative to this config file, so the
+    // "@/*" alias works without it.
     "paths": {
       "@/*": [
         "./src/*"
