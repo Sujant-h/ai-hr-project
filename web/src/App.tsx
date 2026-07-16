@@ -1,13 +1,12 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Home } from './pages/Home';
-import { Workspace } from './pages/Workspace';
+import { Workspace } from './pages/workspace/Workspace';
 
 import { NavBar } from './components/NavBar';
 
 function App() {
   return (
-    <div className="stApp">
+    <div>
       <BrowserRouter>
         <NavBar />
         <Routes>
