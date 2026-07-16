@@ -14,6 +14,9 @@ import type {
 const RULE_BASED_LABEL = 'regelbasiert';
 
 interface SessionState {
+  // Intro-gate UI state, not session data. Spec B removes the intro gate and
+  // this flag together; kept here so Home compiles until then.
+  hasSeenIntro: boolean;
   backendLabel: string | null;
   isLlmActive: boolean;
   jobText: string;
@@ -25,6 +28,7 @@ interface SessionState {
   selectedCandidateId: string | null;
   error: string | null;
 
+  setHasSeenIntro: (seen: boolean) => void;
   setBackendLabel: (label: string) => void;
   setJobText: (text: string) => void;
   setRequirements: (requirements: RequirementOut[]) => void;
@@ -40,6 +44,7 @@ interface SessionState {
 }
 
 const initial = {
+  hasSeenIntro: false,
   backendLabel: null,
   isLlmActive: false,
   jobText: '',
@@ -60,6 +65,7 @@ const initial = {
 export const useSessionStore = create<SessionState>((set) => ({
   ...initial,
 
+  setHasSeenIntro: (hasSeenIntro) => set({ hasSeenIntro }),
   setBackendLabel: (label) =>
     set({ backendLabel: label, isLlmActive: label !== RULE_BASED_LABEL }),
   setJobText: (jobText) => set({ jobText }),

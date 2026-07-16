@@ -4,7 +4,6 @@ import { useSessionStore } from '../store/session';
 import { Intro } from '../components/Intro';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 

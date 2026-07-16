@@ -16,12 +16,14 @@ export type MatchResultOut = components['schemas']['MatchResultOut'];
 export type GapOut = components['schemas']['GapOut'];
 
 export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
+  // A plain field rather than a constructor parameter property: this project
+  // sets erasableSyntaxOnly, which forbids parameter properties.
+  readonly status: number;
+
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
   }
 }
 
