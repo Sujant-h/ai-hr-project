@@ -4,9 +4,8 @@ import { SplineScene } from '../components/SplineScene';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { Reveal } from '../components/Reveal';
 import IMG_ORB from '../assets/orb.webp';
 import IMG_DATA from '../assets/data.webp';
 import IMG_WAVE from '../assets/wave.webp';
@@ -14,25 +13,9 @@ import IMG_STEP_UPLOAD from '../assets/step-upload.webp';
 import IMG_STEP_ANALYZE from '../assets/step-analyze.webp';
 import IMG_STEP_DECIDE from '../assets/step-decide.webp';
 
-const FadeIn = ({ children, delay = 0 }: { children: React.ReactNode, delay?: number }) => {
-  const reduced = usePrefersReducedMotion();
-  if (reduced) return <>{children}</>;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-100px" }}
-      transition={{ duration: 0.7, delay, ease: [0.2, 0.8, 0.2, 1] }}
-    >
-      {children}
-    </motion.div>
-  );
-};
-
 export const Home: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const reduced = usePrefersReducedMotion();
 
   const handleStartDemo = () => {
     navigate('/workspace');
@@ -62,11 +45,7 @@ export const Home: React.FC = () => {
           <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-50 via-slate-50/70 to-transparent"></div>
 
           <div className="absolute top-1/2 left-[5%] md:left-[10%] xl:left-[calc(50vw-530px)] -translate-y-1/2 max-w-xl z-20 px-4">
-            <motion.div
-              initial={reduced ? false : { opacity: 0, y: 20 }}
-              animate={reduced ? undefined : { opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-            >
+            <div>
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">
                 {t('home.heroSubtitle')}
               </div>
@@ -82,7 +61,7 @@ export const Home: React.FC = () => {
               <Button size="lg" onClick={handleStartDemo} className="rounded-full px-8 py-6 text-lg font-bold shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform border-0 text-white">
                 {t('home.startDemo')}
               </Button>
-            </motion.div>
+            </div>
           </div>
         </div>
 
@@ -98,7 +77,7 @@ export const Home: React.FC = () => {
         <div className="max-w-6xl mx-auto px-6 relative z-40">
           
           {/* Problem */}
-          <FadeIn>
+          <Reveal>
             <div id="problem" className="pt-24 pb-16">
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.problemLabel')}</div>
               <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight mb-6">
@@ -108,9 +87,9 @@ export const Home: React.FC = () => {
                 {t('home.problemDesc')}
               </p>
             </div>
-          </FadeIn>
+          </Reveal>
 
-          <FadeIn delay={0.2}>
+          <Reveal delay={0.2}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-32">
               {[
                 { icon: '⏱️', val: '5–10 h', desc: t('home.metric1') },
@@ -128,10 +107,10 @@ export const Home: React.FC = () => {
                 </Card>
               ))}
             </div>
-          </FadeIn>
+          </Reveal>
 
           {/* Solution */}
-          <FadeIn>
+          <Reveal>
             <div id="loesung" className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
               <div className="order-2 md:order-1 rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
                 <img src={IMG_ORB} alt="Illustration des Agenten-Teams" width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
@@ -146,19 +125,19 @@ export const Home: React.FC = () => {
                 </p>
               </div>
             </div>
-          </FadeIn>
+          </Reveal>
 
           {/* Steps Detail */}
-          <FadeIn>
+          <Reveal>
             <div id="schritte" className="mb-12">
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.stepsLabel')}</div>
               <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">{t('home.stepsTitle')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">{t('home.stepsTitle2')}</span></h2>
             </div>
-          </FadeIn>
+          </Reveal>
         </div>
 
         {/* Gallery */}
-        <FadeIn>
+        <Reveal>
           <div className="w-full relative mb-32">
             <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none"></div>
             <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none"></div>
@@ -184,11 +163,11 @@ export const Home: React.FC = () => {
               ))}
             </div>
           </div>
-        </FadeIn>
+        </Reveal>
 
         <div className="max-w-6xl mx-auto px-6">
           {/* Results */}
-          <FadeIn>
+          <Reveal>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
               <div>
                 <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.resultsLabel')}</div>
@@ -206,10 +185,10 @@ export const Home: React.FC = () => {
                 <img src={IMG_DATA} alt="Strukturierte Kandidatendaten und Qualifikationscheckliste" width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
               </div>
             </div>
-          </FadeIn>
+          </Reveal>
 
           {/* Pricing */}
-          <FadeIn>
+          <Reveal>
             <div id="preise" className="text-center mb-12">
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.pricingLabel')}</div>
               <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">{t('home.pricingTitle')}</h2>
@@ -237,10 +216,10 @@ export const Home: React.FC = () => {
                 </Card>
               ))}
             </div>
-          </FadeIn>
+          </Reveal>
 
           {/* Final CTA */}
-          <FadeIn>
+          <Reveal>
             <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50/50 border border-indigo-100 p-12 md:p-20 text-center shadow-lg shadow-indigo-100/50">
               <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">{t('home.ctaTitle')}</h2>
               <p className="text-xl text-slate-600 mb-10">{t('home.ctaDesc')}</p>
@@ -248,7 +227,7 @@ export const Home: React.FC = () => {
                 {t('home.startDemo')}
               </Button>
             </div>
-          </FadeIn>
+          </Reveal>
 
         </div>
       </div>

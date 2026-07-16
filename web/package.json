@@ -20,7 +20,6 @@
     "@splinetool/viewer": "^1.12.98",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.42.2",
     "i18next": "^26.3.6",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
