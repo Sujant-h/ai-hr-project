@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hr_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Optional: map port to host if you want to access API directly
+    # ports:
+    #   - "8000:8000"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: hr_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api

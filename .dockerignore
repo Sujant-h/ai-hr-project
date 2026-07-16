@@ -1,0 +1,9 @@
+# Ignore git and python virtual environments
+.git
+.venv
+__pycache__
+*.pyc
+
+# Ignore frontend build outputs and node_modules
+web/node_modules
+web/dist

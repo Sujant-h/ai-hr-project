@@ -4,7 +4,6 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies
-# PyMuPDF and pypdf sometimes need these for certain operations
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -20,8 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Expose the port Streamlit runs on
-EXPOSE 8501
+# Expose the API port
+EXPOSE 8000
 
-# Run the Streamlit app
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run the FastAPI app
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
