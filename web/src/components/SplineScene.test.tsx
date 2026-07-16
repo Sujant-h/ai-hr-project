@@ -15,13 +15,18 @@ class NoopObserver {
   disconnect() {}
 }
 
-function mockMatchMedia(reduce: boolean) {
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('prefers-reduced-motion') ? reduce : false,
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
+function mockMatchMedia(reduce: boolean, isDesktop = true) {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    let matches = false;
+    if (query.includes('prefers-reduced-motion')) matches = reduce;
+    else if (query.includes('min-width')) matches = isDesktop;
+    return {
+      matches,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+  });
 }
 
 beforeEach(() => {
@@ -44,7 +49,14 @@ describe('SplineScene', () => {
     expect(document.querySelector('spline-viewer')).toBeNull();
   });
 
-  it('mounts the viewer when eager and motion is allowed', async () => {
+  it('keeps only the poster on mobile, even when eager', () => {
+    mockMatchMedia(false, false);
+    render(<SplineScene url="x" eager poster={<div data-testid="poster" />} />);
+    expect(screen.getByTestId('poster')).toBeInTheDocument();
+    expect(document.querySelector('spline-viewer')).toBeNull();
+  });
+
+  it('mounts the viewer on desktop when eager and motion is allowed', async () => {
     render(<SplineScene url="scene-url" eager poster={<div data-testid="poster" />} />);
     await vi.waitFor(() => {
       expect(document.querySelector('spline-viewer')).not.toBeNull();

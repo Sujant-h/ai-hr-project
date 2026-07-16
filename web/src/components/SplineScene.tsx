@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { useIsDesktop } from '../hooks/useIsDesktop';
 
 // React 19 keeps the JSX namespace under the `react` module, not global, so the
 // custom element is registered there.
@@ -33,12 +34,16 @@ interface Props {
 
 export function SplineScene({ url, poster, className, eager = false }: Props) {
   const reduced = usePrefersReducedMotion();
+  const isDesktop = useIsDesktop();
+  // The ~4 MB WebGL viewer only boots on desktop; phones/tablets keep the
+  // poster. reduced-motion / save-data opt out everywhere.
+  const allow3d = isDesktop && !reduced;
   const ref = useRef<HTMLDivElement>(null);
   const [approached, setApproached] = useState(eager);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (approached || reduced) return;
+    if (approached || !allow3d) return;
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -52,10 +57,10 @@ export function SplineScene({ url, poster, className, eager = false }: Props) {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [approached, reduced]);
+  }, [approached, allow3d]);
 
   useEffect(() => {
-    if (reduced || !approached) return;
+    if (!allow3d || !approached) return;
     let alive = true;
     void loadViewer().then(() => {
       if (alive) setReady(true);
@@ -63,9 +68,9 @@ export function SplineScene({ url, poster, className, eager = false }: Props) {
     return () => {
       alive = false;
     };
-  }, [reduced, approached]);
+  }, [allow3d, approached]);
 
-  const showScene = ready && !reduced;
+  const showScene = ready && allow3d;
 
   return (
     <div ref={ref} className={className}>
