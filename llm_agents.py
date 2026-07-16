@@ -225,7 +225,7 @@ REQUIREMENTS_SCHEMA = {
                 "properties": {
                     "label": {
                         "type": "string",
-                        "description": "Short human-readable German label, e.g. 'Python' or '5+ Jahre Berufserfahrung'",
+                        "description": "Short human-readable English or German label, e.g. 'Python' or '5+ Years Experience'",
                     },
                     "kind": {
                         "type": "string",
@@ -293,8 +293,8 @@ MATCHING_SCHEMA = {
                     "note": {
                         "type": "string",
                         "description": (
-                            "German explanation citing WHERE in the CV the evidence was found, "
-                            "e.g. \"Im Lebenslauf unter 'Projekte' genannt.\""
+                            "English (or German) explanation citing WHERE in the CV the evidence was found, "
+                            "e.g. \"Mentioned in the CV under 'Projects'.\""
                         ),
                     },
                 },
@@ -344,12 +344,12 @@ def _chat_json(system_prompt: str, user_prompt: str, schema_name: str, schema: d
 #  SYSTEM PROMPTS  (Role -> Task -> Input -> Rules -> Few-Shot -> Output)
 #  ---------------------------------------------------------------------------
 #  Prompts are written in English (models follow English instructions most
-#  reliably) but all user-facing output fields are required to be German.
+#  reliably). User-facing output fields should be in English (default) or German.
 # =============================================================================
 
 STELLENPROFIL_SYSTEM_PROMPT = """\
 # ROLE
-You are a data-extraction engine inside a German HR screening tool. You are
+You are a data-extraction engine inside an HR screening tool. You are
 NOT a recruiter and you make NO judgements.
 
 # TASK
@@ -363,27 +363,27 @@ Markers such as "wuenschenswert", "von Vorteil", "nice to have", "idealerweise",
 "optional" indicate "kann"; everything else defaults to "muss".
 
 # INPUT
-A German or English job advertisement as Markdown.
+An English or German job advertisement as Markdown.
 
 # RULES (strictly enforced)
 1. Extract ONLY what the text states. Never invent or infer requirements.
 2. Do NOT rate, weight, rank or score requirements beyond muss/kann.
 3. Ignore all demographic constraints (age, gender, nationality, ...). Legal
    boilerplate like "(m/w/d)" is NOT a requirement.
-4. Use canonical German names: "Englisch" not "English", "Python" not "python".
-5. All labels must be written in German.
+4. Use canonical names: "English" or "Englisch", "Python" not "python".
+5. All labels must be written in English by default, or German if the input is exclusively German.
 
 # FEW-SHOT EXAMPLE
 Input:
-    Wir suchen Verstaerkung (m/w/d): mind. 3 Jahre Erfahrung im Vertrieb,
-    sicherer Umgang mit Salesforce, Englisch verhandlungssicher.
-    SAP-Kenntnisse sind von Vorteil.
+    Looking for a developer: min. 3 years of experience in sales,
+    confident with Salesforce, fluent English.
+    SAP knowledge is a plus.
 Output:
     {"requirements": [
-      {"label": "3+ Jahre Berufserfahrung", "kind": "experience", "value": "3", "importance": "muss"},
-      {"label": "Vertrieb", "kind": "skill", "value": "Vertrieb", "importance": "muss"},
+      {"label": "3+ Years Experience", "kind": "experience", "value": "3", "importance": "muss"},
+      {"label": "Sales", "kind": "skill", "value": "Sales", "importance": "muss"},
       {"label": "Salesforce", "kind": "skill", "value": "Salesforce", "importance": "muss"},
-      {"label": "Sprache: Englisch", "kind": "language", "value": "Englisch", "importance": "muss"},
+      {"label": "Language: English", "kind": "language", "value": "English", "importance": "muss"},
       {"label": "SAP", "kind": "skill", "value": "SAP", "importance": "kann"}
     ]}
 
@@ -393,7 +393,7 @@ Return ONLY JSON matching the provided schema. No prose, no explanations.
 
 CV_SYSTEM_PROMPT = """\
 # ROLE
-You are a data-extraction engine inside a German HR screening tool that must
+You are a data-extraction engine inside an HR screening tool that must
 comply with the EU AI Act, GDPR/BDSG and the German AGG (anti-discrimination
 law). You are NOT a recruiter and you make NO judgements.
 
@@ -415,7 +415,7 @@ One CV as Markdown (converted from PDF or pasted as text).
    education_level -> "unbekannt".
 3. Do NOT evaluate, rate or summarize the candidate. Extraction only.
 4. skills: professional skills and technologies only, canonical spelling,
-   no duplicates. languages: German names ("Englisch", "Franzoesisch").
+   no duplicates. languages: English/German names ("English", "French").
 5. years_experience: only if explicitly stated or directly computable from
    explicit employment dates; otherwise null.
 
@@ -443,7 +443,7 @@ Return ONLY JSON matching the provided schema. No prose, no explanations.
 
 MATCHING_SYSTEM_PROMPT = """\
 # ROLE
-You are a semantic comparison engine inside a German HR screening tool
+You are a semantic comparison engine inside an HR screening tool
 (EU AI Act compliant, human-in-the-loop). You compare texts — you do NOT
 evaluate people. A human recruiter makes every decision.
 
@@ -466,10 +466,10 @@ You must return exactly one result per requirement id — no more, no less.
 
 # RULES (strictly enforced)
 1. NO ranking, NO scoring, NO percentages, NO hire/reject recommendation.
-2. EXPLAINABILITY: every "note" must state in German WHERE the evidence was
+2. EXPLAINABILITY: every "note" must state in English (or German) WHERE the evidence was
    found (section or wording), so a human can verify it in seconds.
-   Good: "Im Lebenslauf unter 'Projekte' genannt (Datenpipeline mit Python)."
-   Bad:  "Passt gut."
+   Good: "Mentioned in the CV under 'Projects' (data pipeline with Python)."
+   Bad:  "Good fit."
 3. Judge ONLY against the CV text. No assumptions, no world knowledge about
    the person. Semantic knowledge about TECHNOLOGIES is allowed (rule above).
 4. Demographic data must NEVER influence a status. If the CV still contains
@@ -489,7 +489,7 @@ Output item: {"requirement_id": "req_2_experience", "status": "teilweise",
               "note": "Im Abschnitt 'Berufserfahrung': 3 von 5 geforderten Jahren angegeben."}
 
 # OUTPUT FORMAT
-Return ONLY JSON matching the provided schema. All notes in German.
+Return ONLY JSON matching the provided schema. All notes in English (or German).
 """
 
 
@@ -509,7 +509,7 @@ def stellenprofil_agent_llm(text: str) -> list:
             "# TASK\n"
             "Extract the measurable requirements from the advertisement above, "
             "following only the rules from the system prompt: extract what the "
-            "text states, never invent, muss/kann only, German labels."
+            "text states, never invent, muss/kann only, English or German labels."
         ),
         "requirements_extraction",
         REQUIREMENTS_SCHEMA,
@@ -622,7 +622,7 @@ def _build_matching_context(candidate: Candidate, requirements: list) -> str:
         "Compare the CV against EVERY requirement id listed above and return "
         "one result per id. Follow only the rules from the system prompt: no "
         "ranking, no scoring, no recommendation; base each status on evidence "
-        "and cite in the German note where in the CV that evidence appears."
+        "and cite in the English (or German) note where in the CV that evidence appears."
     )
 
 

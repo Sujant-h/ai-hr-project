@@ -45,13 +45,37 @@ async function toApiError(res: Response): Promise<ApiError> {
   if (res.status === 429) {
     // slowapi's own message is English; everything user-facing here is German.
     message = 'Zu viele Anfragen. Bitte einen Moment warten und erneut versuchen.';
+  } else if (res.status === 401) {
+    message = 'Ungültiger oder fehlender Zugangs-Code (Passwort).';
   }
 
   return new ApiError(res.status, message);
 }
 
+function getClientId(): string {
+  let id = localStorage.getItem('clientId');
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('clientId', id);
+  }
+  return id;
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-Client-ID': getClientId(),
+  };
+  const pwd = localStorage.getItem('pwd');
+  if (pwd) {
+    headers['X-Access-Token'] = pwd;
+  }
+  return headers;
+}
+
 async function getJson<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`);
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw await toApiError(res);
   return res.json();
 }
@@ -59,7 +83,7 @@ async function getJson<T>(endpoint: string): Promise<T> {
 async function postJson<T>(endpoint: string, payload: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw await toApiError(res);
@@ -71,7 +95,11 @@ async function postJson<T>(endpoint: string, payload: unknown): Promise<T> {
  * has to set the header itself. Setting it by hand breaks the upload.
  */
 async function postForm<T>(endpoint: string, form: FormData): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', body: form });
+  const res = await fetch(`${API_BASE}${endpoint}`, { 
+    method: 'POST', 
+    headers: getAuthHeaders(),
+    body: form 
+  });
   if (!res.ok) throw await toApiError(res);
   return res.json();
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '../../store/session';
 import { useScreening } from '../../hooks/useScreening';
@@ -13,17 +14,19 @@ import { CandidatesTab } from './CandidatesTab';
 import { GapsTab } from './GapsTab';
 import { QuestionsTab } from './QuestionsTab';
 
-const TABS = [
-  { slug: 'stellenprofil', label: '① Stellenprofil', Panel: JobProfileTab },
-  { slug: 'bewerbungen', label: '② Bewerbungen', Panel: UploadTab },
-  { slug: 'kandidaten', label: '③ Kandidaten', Panel: CandidatesTab },
-  { slug: 'luecken', label: '④ Informationslücken', Panel: GapsTab },
-  { slug: 'rueckfragen', label: '⑤ Rückfragen', Panel: QuestionsTab },
-  { slug: 'audit', label: '⑥ Audit Log', Panel: AuditLog },
-];
-const DEFAULT_SLUG = TABS[0].slug;
-
 export function Workspace() {
+  const { t } = useTranslation();
+
+  const TABS = [
+    { slug: 'stellenprofil', label: t('workspace.tab1'), Panel: JobProfileTab },
+    { slug: 'bewerbungen', label: t('workspace.tab2'), Panel: UploadTab },
+    { slug: 'kandidaten', label: t('workspace.tab3'), Panel: CandidatesTab },
+    { slug: 'luecken', label: t('workspace.tab4'), Panel: GapsTab },
+    { slug: 'rueckfragen', label: t('workspace.tab5'), Panel: QuestionsTab },
+    { slug: 'audit', label: t('workspace.tab6'), Panel: AuditLog },
+  ];
+  const DEFAULT_SLUG = TABS[0].slug;
+
   const [params, setParams] = useSearchParams();
   const backendLabel = useSessionStore((s) => s.backendLabel);
   const isLlmActive = useSessionStore((s) => s.isLlmActive);
@@ -53,14 +56,13 @@ export function Workspace() {
         <div className="relative z-10 mx-auto max-w-6xl px-6">
           <div className="pb-12 pt-24">
             <div className="mb-4 text-sm font-extrabold uppercase tracking-widest text-indigo-700">
-              Recruiting Workspace
+              {t('workspace.subtitle')}
             </div>
             <h2 className="mb-4 text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
-              Dein Screening-Arbeitsbereich
+              {t('workspace.title')}
             </h2>
             <p className="max-w-2xl text-xl leading-relaxed text-slate-700">
-              Stellenprofil definieren, Bewerbungen analysieren und Ergebnisse transparent prüfen —
-              die Entscheidung bleibt bei dir.
+              {t('workspace.desc')}
             </p>
           </div>
 
@@ -70,8 +72,7 @@ export function Workspace() {
                 ⚠️
               </span>
               <p className="text-sm font-medium">
-                <b className="font-bold">Kein LLM aktiv:</b> Die Agenten laufen im regelbasierten
-                Sandbox-Modus.
+                <b className="font-bold">{t('workspace.noLlm')}</b> {t('workspace.sandbox')}
               </p>
             </div>
           )}

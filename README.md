@@ -9,7 +9,7 @@ questions — **all without ever ranking, scoring, or recommending a hire.**
 The whole product is designed around a **human-in-the-loop** principle and
 European compliance (EU AI Act, GDPR/BDSG, and the German AGG anti-discrimination
 law). The agents only *extract* and *compare* information; every hiring decision
-stays with a human recruiter. The user interface is in **German**.
+stays with a human recruiter. The user interface supports **English and German**.
 
 ---
 
@@ -431,8 +431,8 @@ demo pipeline end to end.
 
 ## Notes
 
-- The UI language is German; the LLM system prompts are written in English (for
-  model reliability) but all user-facing output is in German.
+- The UI language is English (default) and German; the LLM system prompts are written in English (for
+  model reliability) and user-facing output supports both languages.
 - No candidate data is persisted — everything lives in the Streamlit session and
   is cleared when you reload or restart.
 - This is a **demonstration** of a compliant workflow, not a production ATS.

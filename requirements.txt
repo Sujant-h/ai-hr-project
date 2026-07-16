@@ -11,3 +11,4 @@ slowapi==0.1.9
 # Required by the multipart Form/UploadFile handling in api/main.py:/api/cv.
 # Without it FastAPI raises at import time and the app cannot start at all.
 python-multipart==0.0.20
+python-dotenv==1.0.1

@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent } from './ui/card';
@@ -7,6 +8,7 @@ import { useSessionStore } from '../store/session';
 import { STATUS_CLASS, STATUS_LABEL, metCount } from '../lib/status';
 
 export function CandidateDetail() {
+  const { t } = useTranslation();
   const analyses = useSessionStore((s) => s.analyses);
   const selectedCandidateId = useSessionStore((s) => s.selectedCandidateId);
   const setSelectedCandidateId = useSessionStore((s) => s.setSelectedCandidateId);
@@ -33,23 +35,23 @@ export function CandidateDetail() {
                     variant="outline"
                     className="rounded-xl border-slate-200 bg-white font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900"
                   >
-                    &larr; Zurück
+                    {t('candidateDetail.back')}
                   </Button>
                 </Dialog.Close>
               </div>
 
               <Dialog.Title className="sr-only">
-                Kandidatenprofil: {analysis.candidate.name}
+                {t('candidateDetail.profile')}: {analysis.candidate.name}
               </Dialog.Title>
 
               <div className="mb-8">
                 <div className="mb-2 text-xs font-bold uppercase tracking-widest text-indigo-600">
-                  Kandidatenprofil
+                  {t('candidateDetail.profile')}
                 </div>
                 <h2 className="mb-2 text-4xl font-black text-slate-900">{analysis.candidate.name}</h2>
                 <p className="text-lg font-medium text-slate-600">
                   {metCount(analysis.candidate.matches)}/{analysis.candidate.matches.length}{' '}
-                  Anforderungen erfüllt &middot; {analysis.candidate.gaps.length} Informationslücke(n)
+                  {t('candidateDetail.reqsMet')} &middot; {analysis.candidate.gaps.length} {t('candidateDetail.gaps')}
                 </p>
               </div>
 
@@ -60,7 +62,7 @@ export function CandidateDetail() {
                       {analysis.candidate.skills.length}
                     </div>
                     <div className="text-sm font-medium uppercase tracking-wide text-slate-500">
-                      Skills erkannt
+                      {t('candidateDetail.skills')}
                     </div>
                   </CardContent>
                 </Card>
@@ -70,7 +72,7 @@ export function CandidateDetail() {
                       {analysis.candidate.languages.length}
                     </div>
                     <div className="text-sm font-medium uppercase tracking-wide text-slate-500">
-                      Sprachen
+                      {t('candidateDetail.languages')}
                     </div>
                   </CardContent>
                 </Card>
@@ -90,7 +92,7 @@ export function CandidateDetail() {
                 </div>
               )}
 
-              <h4 className="mb-4 text-xl font-bold text-slate-900">Qualifikationscheckliste</h4>
+              <h4 className="mb-4 text-xl font-bold text-slate-900">{t('candidateDetail.checklist')}</h4>
               {analysis.candidate.matches.length ? (
                 <div className="mb-10 flex flex-col gap-3">
                   {analysis.candidate.matches.map((m) => (
@@ -119,14 +121,12 @@ export function CandidateDetail() {
                 </div>
               ) : (
                 <p className="mb-10 italic text-slate-500">
-                  Keine Anforderungen zum Abgleich gefunden.
+                  {t('candidateDetail.noReqs')}
                 </p>
               )}
 
               <div className="mt-8 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-6 text-sm text-indigo-900">
-                ⚖️ <strong className="font-bold">Human-in-the-Loop:</strong> Diese Ansicht zeigt nur
-                extrahierte Daten &mdash; keine Bewertung, keine Empfehlung. Die Entscheidung triffst
-                du.
+                ⚖️ <strong className="font-bold">{t('candidateDetail.humanInTheLoop')}</strong> {t('candidateDetail.humanWarning')}
               </div>
             </>
           )}

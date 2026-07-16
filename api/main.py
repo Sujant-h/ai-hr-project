@@ -10,7 +10,7 @@ This module must never import Streamlit.
 
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends, Header
 from pydantic import BaseModel
 
 import llm_agents
@@ -33,6 +33,9 @@ from api.schemas import (
 app = FastAPI(title="Recruiting AI API", version="1.0.0")
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -53,11 +56,22 @@ app.add_middleware(
 # MAX_INPUT_CHARS caps the cost of one call; this caps the number of calls.
 # The other half of the mitigation is a hard monthly spend cap on the OpenAI
 # account itself — set it, it is not optional.
-limiter = Limiter(key_func=get_remote_address)
+def get_client_id_or_ip(request: Request) -> str:
+    return request.headers.get("X-Client-ID") or get_remote_address(request)
+
+limiter = Limiter(key_func=get_client_id_or_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-LLM_RATE_LIMIT = os.getenv("LLM_RATE_LIMIT", "30/minute")
+LIMIT_JOB_PROFILE = os.getenv("LIMIT_JOB_PROFILE", "3/day")
+LIMIT_CV = os.getenv("LIMIT_CV", "15/day")
+LIMIT_ANALYSIS = os.getenv("LIMIT_ANALYSIS", "3/day")
+
+ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD")
+
+def verify_password(x_access_token: Optional[str] = Header(None)):
+    if ACCESS_PASSWORD and x_access_token != ACCESS_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid or missing access token")
 
 
 class BackendOut(BaseModel):
@@ -80,6 +94,12 @@ def get_backend() -> BackendOut:
     return BackendOut(label=backend_label())
 
 
+@app.get("/api/verify", dependencies=[Depends(verify_password)])
+def get_verify():
+    """Verify that the access password is correct."""
+    return {"status": "ok"}
+
+
 @app.get("/api/demo", response_model=DemoOut)
 def get_demo() -> DemoOut:
     """Seed data for the "Demo-Daten laden" button."""
@@ -99,8 +119,8 @@ class JobProfileOut(BaseModel):
     backend: str
 
 
-@app.post("/api/job-profile", response_model=JobProfileOut)
-@limiter.limit(LLM_RATE_LIMIT)
+@app.post("/api/job-profile", response_model=JobProfileOut, dependencies=[Depends(verify_password)])
+@limiter.limit(LIMIT_JOB_PROFILE)
 def post_job_profile(request: Request, payload: JobProfileIn) -> JobProfileOut:
     """① Stellenprofil-Agent: job ad -> measurable requirements."""
     run = analyze_job_profile(payload.text)
@@ -143,8 +163,8 @@ def _upload_to_markdown(upload: UploadFile, data: bytes) -> str:
         return ""
 
 
-@app.post("/api/cv", response_model=CvOut)
-@limiter.limit(LLM_RATE_LIMIT)
+@app.post("/api/cv", response_model=CvOut, dependencies=[Depends(verify_password)])
+@limiter.limit(LIMIT_CV)
 async def post_cv(
     request: Request,
     name: str = Form(...),
@@ -192,8 +212,8 @@ class AnalysisOut(BaseModel):
     audit: list[AuditEntryOut]
 
 
-@app.post("/api/analysis", response_model=AnalysisOut)
-@limiter.limit(LLM_RATE_LIMIT)
+@app.post("/api/analysis", response_model=AnalysisOut, dependencies=[Depends(verify_password)])
+@limiter.limit(LIMIT_ANALYSIS)
 def post_analysis(request: Request, payload: AnalysisIn) -> AnalysisOut:
     """③④⑤ Matching + gaps + follow-up questions for every candidate sent.
 

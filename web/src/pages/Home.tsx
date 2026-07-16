@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import IMG_ORB from '../assets/orb.webp';
 import IMG_DATA from '../assets/data.webp';
@@ -29,6 +30,7 @@ const FadeIn = ({ children, delay = 0 }: { children: React.ReactNode, delay?: nu
 };
 
 export const Home: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const reduced = usePrefersReducedMotion();
 
@@ -66,20 +68,19 @@ export const Home: React.FC = () => {
               transition={{ duration: 0.8 }}
             >
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">
-                Recruiting AI · Multi-Agent HR
+                {t('home.heroSubtitle')}
               </div>
               <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tight leading-[1.05] mb-6">
-                Bewerbungen verstehen.<br/>
+                {t('home.heroTitleLine1')}<br/>
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500">
-                  Menschen entscheiden.
+                  {t('home.heroTitleLine2')}
                 </span>
               </h1>
               <p className="text-lg md:text-xl text-slate-700 leading-relaxed max-w-lg mb-8">
-                Sechs spezialisierte KI-Agenten lesen Stellenprofile und Lebensläufe,
-                prüfen Anforderungen und decken Informationslücken auf — die Entscheidung bleibt bei dir.
+                {t('home.heroDesc')}
               </p>
               <Button size="lg" onClick={handleStartDemo} className="rounded-full px-8 py-6 text-lg font-bold shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform border-0 text-white">
-                🚀 Demo starten
+                {t('home.startDemo')}
               </Button>
             </motion.div>
           </div>
@@ -99,13 +100,12 @@ export const Home: React.FC = () => {
           {/* Problem */}
           <FadeIn>
             <div id="problem" className="pt-24 pb-16">
-              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Das Problem</div>
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.problemLabel')}</div>
               <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight mb-6">
-                5–10 Stunden<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">pro Stelle.</span>
+                {t('home.problemTitleLine1')}<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">{t('home.problemTitleLine2')}</span>
               </h2>
               <p className="text-xl text-slate-600 max-w-2xl leading-relaxed">
-                Ohne eigene HR-Abteilung wird jede Ausschreibung zur Belastung: 
-                unterschiedliche CV-Formate, fehlende Angaben, keine nachvollziehbare Bewertung.
+                {t('home.problemDesc')}
               </p>
             </div>
           </FadeIn>
@@ -113,9 +113,9 @@ export const Home: React.FC = () => {
           <FadeIn delay={0.2}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-32">
               {[
-                { icon: '⏱️', val: '5–10 h', desc: 'Sichtungsaufwand pro Stelle' },
-                { icon: '🛡️', val: '100 %', desc: 'der Schritte im Audit Log' },
-                { icon: '⚖️', val: '0', desc: 'automatische Entscheidungen' }
+                { icon: '⏱️', val: '5–10 h', desc: t('home.metric1') },
+                { icon: '🛡️', val: '100 %', desc: t('home.metric2') },
+                { icon: '⚖️', val: '0', desc: t('home.metric3') }
               ].map((s, i) => (
                 <Card key={i} className="bg-white/60 backdrop-blur-md border-slate-200/60 shadow-xl shadow-slate-200/40 hover:-translate-y-2 transition-transform duration-300">
                   <CardContent className="p-8 text-center flex flex-col items-center">
@@ -137,13 +137,12 @@ export const Home: React.FC = () => {
                 <img src={IMG_ORB} alt="Illustration des Agenten-Teams" width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
               </div>
               <div className="order-1 md:order-2">
-                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Die Lösung</div>
+                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.solutionLabel')}</div>
                 <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">
-                  Ein Agenten-<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">team</span>, ein Flow.
+                  {t('home.solutionTitleLine1')}<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">{t('home.solutionTitleLine2')}</span>{t('home.solutionTitleLine3')}
                 </h2>
                 <p className="text-xl text-slate-600 leading-relaxed">
-                  Vom Stellenprofil bis zur Rückfrage: jeder Agent hat genau eine Aufgabe — 
-                  transparent, überprüfbar, nachvollziehbar.
+                  {t('home.solutionDesc')}
                 </p>
               </div>
             </div>
@@ -152,8 +151,8 @@ export const Home: React.FC = () => {
           {/* Steps Detail */}
           <FadeIn>
             <div id="schritte" className="mb-12">
-              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Im Detail</div>
-              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">Drei Schritte. <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">Ein Flow.</span></h2>
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.stepsLabel')}</div>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">{t('home.stepsTitle')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">{t('home.stepsTitle2')}</span></h2>
             </div>
           </FadeIn>
         </div>
@@ -166,11 +165,11 @@ export const Home: React.FC = () => {
             
             <div className="flex overflow-x-auto gap-6 px-12 md:px-32 pb-8 snap-x snap-mandatory hide-scrollbar">
               {[
-                { img: IMG_STEP_UPLOAD, step: 'SCHRITT 01', title: 'Hochladen', desc: 'Stelle & Lebensläufe rein — als PDF oder Text.' },
-                { img: IMG_STEP_ANALYZE, step: 'SCHRITT 02', title: 'Analysieren', desc: 'CV-Agent strukturiert, Matching-Agent prüft jede Anforderung.' },
-                { img: IMG_STEP_DECIDE, step: 'SCHRITT 03', title: 'Entscheiden', desc: 'Der Mensch wählt — nie der Algorithmus.' },
-                { img: IMG_ORB, step: 'SYSTEM', title: 'Multi-Agent', desc: 'Sechs Agenten, ein sauberer, nachvollziehbarer Flow.' },
-                { img: IMG_WAVE, step: 'TRANSPARENZ', title: 'Audit Log', desc: 'Jeder Verarbeitungsschritt lückenlos dokumentiert.' },
+                { img: IMG_STEP_UPLOAD, step: t('home.step1Label'), title: t('home.step1Title'), desc: t('home.step1Desc') },
+                { img: IMG_STEP_ANALYZE, step: t('home.step2Label'), title: t('home.step2Title'), desc: t('home.step2Desc') },
+                { img: IMG_STEP_DECIDE, step: t('home.step3Label'), title: t('home.step3Title'), desc: t('home.step3Desc') },
+                { img: IMG_ORB, step: t('home.step4Label'), title: t('home.step4Title'), desc: t('home.step4Desc') },
+                { img: IMG_WAVE, step: t('home.step5Label'), title: t('home.step5Title'), desc: t('home.step5Desc') },
               ].map((item, i) => (
                 <Card key={i} className="flex-none w-[85vw] md:w-[400px] snap-center overflow-hidden border-slate-200/60 shadow-xl bg-white hover:-translate-y-2 transition-all">
                   <div className="h-64 bg-slate-100 overflow-hidden">
@@ -192,16 +191,15 @@ export const Home: React.FC = () => {
           <FadeIn>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
               <div>
-                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Ergebnisse</div>
+                <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.resultsLabel')}</div>
                 <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">
-                  Struktur statt<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">Bauchgefühl.</span>
+                  {t('home.resultsTitleLine1')}<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">{t('home.resultsTitleLine2')}</span>
                 </h2>
                 <p className="text-xl text-slate-600 leading-relaxed mb-8">
-                  Saubere Kandidatenprofile, eine transparente Qualifikationscheckliste und ein 
-                  lückenloses Audit Log — Human-in-the-Loop by Design. Keine Rangfolge, keine Empfehlung.
+                  {t('home.resultsDesc')}
                 </p>
                 <Button size="lg" onClick={handleStartDemo} className="rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border-0 shadow-sm">
-                  Workspace öffnen &rarr;
+                  {t('nav.openWorkspace')}
                 </Button>
               </div>
               <div className="rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
@@ -213,18 +211,18 @@ export const Home: React.FC = () => {
           {/* Pricing */}
           <FadeIn>
             <div id="preise" className="text-center mb-12">
-              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">Preise</div>
-              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Einfach. Planbar.</h2>
+              <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.pricingLabel')}</div>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">{t('home.pricingTitle')}</h2>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-32">
               {[
-                { name: 'Starter', price: '0€', unit: '/ Demo', features: ['Vollständiger Workspace', 'Bis zu 5 Bewerbungen', 'Audit Log'] },
-                { name: 'Team', price: '49€', unit: '/ Monat', pop: true, features: ['Unbegrenzte Bewerbungen', 'Alle sechs Agenten', 'Rückfragen-E-Mails', 'Priorisierter Support'] },
-                { name: 'Enterprise', price: 'Auf Anfrage', unit: '', features: ['SSO & Rollen', 'Eigene Modelle / API', 'Audit-Export'] }
+                { name: t('home.plan1Name'), price: '0€', unit: t('home.plan1Unit'), features: [t('home.plan1F1'), t('home.plan1F2'), t('home.plan1F3')] },
+                { name: t('home.plan2Name'), price: '49€', unit: t('home.plan2Unit'), pop: true, features: [t('home.plan2F1'), t('home.plan2F2'), t('home.plan2F3'), t('home.plan2F4')] },
+                { name: t('home.plan3Name'), price: t('home.plan3Price'), unit: '', features: [t('home.plan3F1'), t('home.plan3F2'), t('home.plan3F3')] }
               ].map((p, i) => (
                 <Card key={i} className={cn("relative overflow-hidden bg-white/60 backdrop-blur-md border-slate-200/60 shadow-lg hover:-translate-y-2 transition-transform duration-300", p.pop ? "border-indigo-300 shadow-xl shadow-indigo-100" : "")}>
-                  {p.pop && <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">Beliebt</div>}
+                  {p.pop && <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">{t('home.plan2Pop')}</div>}
                   <CardContent className="p-8">
                     <div className="text-lg font-bold text-slate-900 mb-2">{p.name}</div>
                     <div className="text-4xl font-black text-slate-900 mb-6">{p.price}<span className="text-sm text-slate-500 font-semibold">{p.unit}</span></div>
@@ -244,10 +242,10 @@ export const Home: React.FC = () => {
           {/* Final CTA */}
           <FadeIn>
             <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50/50 border border-indigo-100 p-12 md:p-20 text-center shadow-lg shadow-indigo-100/50">
-              <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">Bereit für den ersten Screening-Lauf?</h2>
-              <p className="text-xl text-slate-600 mb-10">Starte in Sekunden — ganz ohne Setup.</p>
+              <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight mb-6">{t('home.ctaTitle')}</h2>
+              <p className="text-xl text-slate-600 mb-10">{t('home.ctaDesc')}</p>
               <Button size="lg" onClick={handleStartDemo} className="rounded-full px-10 py-7 text-xl font-bold shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:scale-105 transition-transform border-0 text-white">
-                🚀 Demo starten
+                {t('home.startDemo')}
               </Button>
             </div>
           </FadeIn>

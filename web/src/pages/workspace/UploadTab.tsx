@@ -1,5 +1,6 @@
 import { useState, type DragEvent, type ChangeEvent } from 'react';
 import { FileText, Play, Upload, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -9,6 +10,7 @@ import { useScreening } from '../../hooks/useScreening';
 const ACCEPT = '.txt,.pdf';
 
 export function UploadTab() {
+  const { t } = useTranslation();
   const candidates = useSessionStore((s) => s.candidates);
   const requirements = useSessionStore((s) => s.requirements);
   const isAnalyzing = useSessionStore((s) => s.isAnalyzing);
@@ -49,8 +51,8 @@ export function UploadTab() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6">
-        <h2 className="mb-2 text-2xl font-bold text-slate-900">Bewerbungen hochladen</h2>
-        <p className="text-slate-600">Lade Lebensläufe hoch, um sie gegen das Profil zu prüfen.</p>
+        <h2 className="mb-2 text-2xl font-bold text-slate-900">{t('upload.title')}</h2>
+        <p className="text-slate-600">{t('upload.desc')}</p>
       </div>
 
       <div
@@ -71,9 +73,9 @@ export function UploadTab() {
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
           <Upload size={32} className="text-indigo-600" aria-hidden="true" />
         </div>
-        <p className="mb-2 text-xl font-bold text-slate-900">Ziehe Lebensläufe hierher</p>
+        <p className="mb-2 text-xl font-bold text-slate-900">{t('upload.dragDrop')}</p>
         <p className="mb-8 font-medium text-slate-500">
-          PDF oder Text — oder wähle sie manuell aus
+          {t('upload.pdfOrText')}
         </p>
 
         {/* sr-only, not hidden: display:none would make this unreachable by keyboard. */}
@@ -81,7 +83,7 @@ export function UploadTab() {
           htmlFor="cv-upload"
           className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-4 font-bold text-white shadow-xl shadow-indigo-200 transition-transform hover:scale-105 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2"
         >
-          {isUploading ? 'Wird verarbeitet...' : 'Dateien durchsuchen...'}
+          {isUploading ? t('upload.processing') : t('upload.browse')}
           <input
             id="cv-upload"
             type="file"
@@ -102,14 +104,14 @@ export function UploadTab() {
           disabled={isLoadingDemo}
           className="rounded-xl border-slate-200 bg-white font-semibold text-slate-700"
         >
-          {isLoadingDemo ? 'Lade...' : '✨ Demo-Daten laden'}
+          {isLoadingDemo ? t('upload.loading') : t('upload.demoData')}
         </Button>
       </div>
 
       {candidates.length > 0 && (
         <>
           <h3 className="mb-4 text-xl font-bold text-slate-900">
-            Aktuelle Kandidaten ({candidates.length})
+            {t('upload.currentCandidates')} ({candidates.length})
           </h3>
           <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             {candidates.map((c) => (
@@ -136,8 +138,7 @@ export function UploadTab() {
 
           {!requirements.length && (
             <p className="mb-4 text-sm font-medium text-amber-700">
-              Zuerst ein Stellenprofil unter ① analysieren — ohne Anforderungen gibt es nichts
-              abzugleichen.
+              {t('upload.analyzeFirst')}
             </p>
           )}
 
@@ -148,7 +149,7 @@ export function UploadTab() {
             className="flex items-center gap-2 rounded-xl border-0 bg-gradient-to-r from-indigo-600 to-blue-600 px-8 text-base font-bold text-white shadow-lg shadow-indigo-200 hover:from-indigo-500 hover:to-blue-500"
           >
             <Play size={18} fill="currentColor" aria-hidden="true" />
-            {isAnalyzing ? 'Analysiere...' : 'Gesamtanalyse starten'}
+            {isAnalyzing ? t('upload.analyzing') : t('upload.startAnalysis')}
           </Button>
         </>
       )}

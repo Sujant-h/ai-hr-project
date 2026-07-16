@@ -1,4 +1,5 @@
 import { ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { useSessionStore } from '../../store/session';
 import { metCount } from '../../lib/status';
 
 export function CandidatesTab() {
+  const { t } = useTranslation();
   const analyses = useSessionStore((s) => s.analyses);
   const isAnalyzing = useSessionStore((s) => s.isAnalyzing);
   const setSelectedCandidateId = useSessionStore((s) => s.setSelectedCandidateId);
@@ -16,7 +18,7 @@ export function CandidatesTab() {
         <span className="text-xl" aria-hidden="true">
           ⏳
         </span>{' '}
-        Die Agenten arbeiten im Hintergrund...
+        {t('candidates.working')}
       </div>
     );
   }
@@ -24,7 +26,7 @@ export function CandidatesTab() {
   if (!analyses.length) {
     return (
       <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-6 font-medium text-amber-800">
-        Noch keine Analyse durchgeführt. (Gehe zu ② Bewerbungen)
+        {t('candidates.noAnalysis')}
       </div>
     );
   }
@@ -32,9 +34,9 @@ export function CandidatesTab() {
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-8">
-        <h2 className="mb-2 text-2xl font-bold text-slate-900">Kandidatenübersicht</h2>
+        <h2 className="mb-2 text-2xl font-bold text-slate-900">{t('candidates.title')}</h2>
         <p className="text-slate-600">
-          Erfüllte Anforderungen je Bewerber. Keine Rangfolge, keine Empfehlung.
+          {t('candidates.desc')}
         </p>
       </div>
 
@@ -56,8 +58,8 @@ export function CandidatesTab() {
 
               <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-600">
                 {candidate.gaps.length
-                  ? `${candidate.gaps.length} Informationslücke(n) gefunden.`
-                  : 'Keine Informationslücken.'}
+                  ? `${candidate.gaps.length} ${t('candidates.gapsFound')}`
+                  : t('candidates.noGaps')}
               </p>
 
               <div className="mb-4 flex flex-wrap gap-2">
@@ -73,7 +75,7 @@ export function CandidatesTab() {
                     className="rounded-md bg-amber-100 text-xs font-semibold text-amber-800"
                     title={fallback_reason}
                   >
-                    Fallback
+                    {t('candidates.fallback')}
                   </Badge>
                 )}
               </div>
@@ -83,7 +85,7 @@ export function CandidatesTab() {
                 onClick={() => setSelectedCandidateId(candidate.id)}
                 className="mt-auto flex w-full items-center justify-center gap-1 rounded-xl border-slate-200 font-bold text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
               >
-                Profil ansehen <ChevronRight size={16} />
+                {t('candidates.viewProfile')} <ChevronRight size={16} />
               </Button>
             </CardContent>
           </Card>
