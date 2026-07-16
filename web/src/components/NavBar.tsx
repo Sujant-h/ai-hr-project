@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-
-const _HF = "https://d8j0ntlcm91z4.cloudfront.net/user_33IJIDZ0cOmwdzXkCP5nbQryjVC/";
-const LOGO_URL = _HF + "hf_20260621_113356_37574f61-266d-4c83-a8e0-bdd07a191331.png";
+import LOGO_URL from '@/assets/logo.webp';
 
 export const NavBar: React.FC = () => {
   const location = useLocation();
@@ -27,7 +25,7 @@ export const NavBar: React.FC = () => {
       )}>
         {/* Brand */}
         <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <img src={LOGO_URL} alt="Recruiting AI" className="w-8 h-8 rounded-lg object-contain shadow-sm" />
+          <img src={LOGO_URL} alt="Recruiting AI" width={32} height={32} className="w-8 h-8 rounded-lg object-contain shadow-sm" />
           <span className="font-extrabold text-lg text-slate-900 tracking-tight">Recruiting AI</span>
           <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider hidden sm:inline-block">
             Multi-Agent HR
