@@ -26,18 +26,18 @@ export const NavBar: React.FC = () => {
         scrolled ? "bg-white/70 shadow-xl border-white/60" : "border-white/40"
       )}>
         {/* Brand */}
-        <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <img src={LOGO_URL} alt="Recruiting AI" width={32} height={32} className="w-8 h-8 rounded-lg object-contain shadow-sm" />
-          <span className="font-extrabold text-lg text-slate-900 tracking-tight">Recruiting AI</span>
-          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider hidden sm:inline-block">
+        <div className="flex-1 flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0 shrink" onClick={() => navigate('/')}>
+          <img src={LOGO_URL} alt="Recruiting AI" width={32} height={32} className="w-8 h-8 rounded-lg object-contain shadow-sm shrink-0" />
+          <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight truncate">Recruiting AI</span>
+          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider hidden lg:inline-block shrink-0">
             Multi-Agent HR
           </span>
         </div>
 
         {/* Spacer / Links */}
-        <div className="flex-2 flex justify-center">
+        <div className="hidden lg:flex flex-1 justify-center">
           {isHome && (
-            <div className="hidden md:flex items-center gap-1">
+            <div className="flex items-center gap-1">
               <a href="#problem" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">{t('nav.problem')}</a>
               <a href="#loesung" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">{t('nav.solution')}</a>
               <a href="#schritte" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">{t('nav.steps')}</a>
@@ -47,21 +47,21 @@ export const NavBar: React.FC = () => {
         </div>
 
         {/* CTA */}
-        <div className="flex-1 flex justify-end items-center gap-2">
+        <div className="flex-1 flex justify-end items-center gap-1 sm:gap-2 shrink-0">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'de' : 'en')}
-            className="font-bold text-slate-600 hover:bg-slate-100 rounded-xl mr-2"
+            className="font-bold text-slate-600 hover:bg-slate-100 rounded-xl shrink-0 px-2 sm:px-3"
           >
             {i18n.language.toUpperCase()}
           </Button>
           {isHome ? (
-            <Button onClick={() => navigate('/workspace')} className="rounded-xl shadow-md bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-500 hover:to-blue-400 text-white font-semibold border-0">
+            <Button onClick={() => navigate('/workspace')} className="rounded-xl shadow-md bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-500 hover:to-blue-400 text-white font-semibold border-0 shrink-0 text-xs sm:text-sm px-3 sm:px-4">
               {t('nav.openWorkspace')}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => navigate('/')} className="rounded-xl font-semibold bg-white/60 backdrop-blur-sm border-slate-200">
+            <Button variant="outline" onClick={() => navigate('/')} className="rounded-xl font-semibold bg-white/60 backdrop-blur-sm border-slate-200 shrink-0 text-xs sm:text-sm px-3 sm:px-4">
               {t('nav.home')}
             </Button>
           )}
