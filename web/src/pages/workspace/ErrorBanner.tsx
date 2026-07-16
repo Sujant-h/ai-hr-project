@@ -13,7 +13,7 @@ export function ErrorBanner() {
       <p className="text-sm font-medium">{error}</p>
       <button
         onClick={() => setError(null)}
-        className="shrink-0 rounded-lg px-2 py-1 text-sm font-bold text-red-700 hover:bg-red-100"
+        className="shrink-0 rounded-lg px-2 py-1 text-sm font-bold text-red-700 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
         aria-label="Fehlermeldung schließen"
       >
         ✕

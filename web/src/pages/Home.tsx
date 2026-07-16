@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import IMG_ORB from '../assets/orb.webp';
 import IMG_DATA from '../assets/data.webp';
 import IMG_WAVE from '../assets/wave.webp';
@@ -12,19 +13,24 @@ import IMG_STEP_UPLOAD from '../assets/step-upload.webp';
 import IMG_STEP_ANALYZE from '../assets/step-analyze.webp';
 import IMG_STEP_DECIDE from '../assets/step-decide.webp';
 
-const FadeIn = ({ children, delay = 0 }: { children: React.ReactNode, delay?: number }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 30 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true, margin: "-100px" }}
-    transition={{ duration: 0.7, delay, ease: [0.2, 0.8, 0.2, 1] }}
-  >
-    {children}
-  </motion.div>
-);
+const FadeIn = ({ children, delay = 0 }: { children: React.ReactNode, delay?: number }) => {
+  const reduced = usePrefersReducedMotion();
+  if (reduced) return <>{children}</>;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.7, delay, ease: [0.2, 0.8, 0.2, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
+  const reduced = usePrefersReducedMotion();
 
   const handleStartDemo = () => {
     navigate('/workspace');
@@ -59,7 +65,11 @@ export const Home: React.FC = () => {
           <div className="absolute inset-0 z-10 bg-gradient-to-r from-slate-50 via-slate-50/70 to-transparent"></div>
 
           <div className="absolute top-1/2 left-[5%] md:left-[10%] xl:left-[calc(50vw-530px)] -translate-y-1/2 max-w-xl z-20 px-4">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+            <motion.div
+              initial={reduced ? false : { opacity: 0, y: 20 }}
+              animate={reduced ? undefined : { opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+            >
               <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">
                 Recruiting AI · Multi-Agent HR
               </div>
