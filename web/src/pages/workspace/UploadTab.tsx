@@ -125,7 +125,7 @@ export function UploadTab() {
                   <button
                     onClick={() => removeCandidate(c.id)}
                     aria-label={`${c.name} entfernen`}
-                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                   >
                     <X size={16} />
                   </button>

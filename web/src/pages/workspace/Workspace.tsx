@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect } from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
+import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '../../store/session';
 import { useScreening } from '../../hooks/useScreening';
@@ -13,16 +14,17 @@ import { GapsTab } from './GapsTab';
 import { QuestionsTab } from './QuestionsTab';
 
 const TABS = [
-  { id: 1, label: '① Stellenprofil' },
-  { id: 2, label: '② Bewerbungen' },
-  { id: 3, label: '③ Kandidaten' },
-  { id: 4, label: '④ Informationslücken' },
-  { id: 5, label: '⑤ Rückfragen' },
-  { id: 6, label: '⑥ Audit Log' },
+  { slug: 'stellenprofil', label: '① Stellenprofil', Panel: JobProfileTab },
+  { slug: 'bewerbungen', label: '② Bewerbungen', Panel: UploadTab },
+  { slug: 'kandidaten', label: '③ Kandidaten', Panel: CandidatesTab },
+  { slug: 'luecken', label: '④ Informationslücken', Panel: GapsTab },
+  { slug: 'rueckfragen', label: '⑤ Rückfragen', Panel: QuestionsTab },
+  { slug: 'audit', label: '⑥ Audit Log', Panel: AuditLog },
 ];
+const DEFAULT_SLUG = TABS[0].slug;
 
 export function Workspace() {
-  const [activeTab, setActiveTab] = useState(1);
+  const [params, setParams] = useSearchParams();
   const backendLabel = useSessionStore((s) => s.backendLabel);
   const isLlmActive = useSessionStore((s) => s.isLlmActive);
   const { fetchBackendLabel } = useScreening();
@@ -30,6 +32,20 @@ export function Workspace() {
   useEffect(() => {
     void fetchBackendLabel();
   }, [fetchBackendLabel]);
+
+  const requested = params.get('tab');
+  const active = TABS.some((t) => t.slug === requested) ? requested! : DEFAULT_SLUG;
+
+  const onValueChange = (slug: string) => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', slug);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <>
@@ -62,41 +78,39 @@ export function Workspace() {
 
           <ErrorBanner />
 
-          <div className="hide-scrollbar mb-8 flex overflow-x-auto border-b border-slate-200">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  '-mb-[1px] whitespace-nowrap border-b-2 px-6 py-4 text-[15px] font-semibold transition-all',
-                  activeTab === tab.id
-                    ? 'border-indigo-600 text-indigo-700'
-                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <Tabs.Root value={active} onValueChange={onValueChange}>
+            <Tabs.List
+              aria-label="Screening-Schritte"
+              className="hide-scrollbar mb-8 flex overflow-x-auto border-b border-slate-200"
+            >
+              {TABS.map((tab) => (
+                <Tabs.Trigger
+                  key={tab.slug}
+                  value={tab.slug}
+                  className={cn(
+                    '-mb-[1px] whitespace-nowrap border-b-2 px-6 py-4 text-[15px] font-semibold transition-all',
+                    'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
+                    'rounded-t-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
+                    'data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700',
+                  )}
+                >
+                  {tab.label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
 
-          <div className="min-h-[600px]">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === 1 && <JobProfileTab />}
-                {activeTab === 2 && <UploadTab />}
-                {activeTab === 3 && <CandidatesTab />}
-                {activeTab === 4 && <GapsTab />}
-                {activeTab === 5 && <QuestionsTab />}
-                {activeTab === 6 && <AuditLog />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+            <div className="min-h-[600px]">
+              {TABS.map((tab) => (
+                <Tabs.Content
+                  key={tab.slug}
+                  value={tab.slug}
+                  className="animate-in fade-in duration-200 focus-visible:outline-none"
+                >
+                  <tab.Panel />
+                </Tabs.Content>
+              ))}
+            </div>
+          </Tabs.Root>
         </div>
       </div>
       <CandidateDetail />
