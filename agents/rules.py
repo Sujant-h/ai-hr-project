@@ -47,6 +47,11 @@ SKILL_VOCAB = {
     "Vertrieb": ["vertrieb", "sales"],
     "Marketing": ["marketing", "seo", "sea"],
     "Buchhaltung": ["buchhaltung", "accounting", "rechnungswesen"],
+    "IT-Sicherheit": ["it-sicherheit", "it security", "cyber security", "it-forensik", "penetration testing"],
+    "Informatik": ["informatik", "computer science"],
+    "Wirtschaftsinformatik": ["wirtschaftsinformatik"],
+    "Naturwissenschaften": ["naturwissenschaften"],
+    "Lösungsorientiert": ["lösungsorientiert"],
 }
 
 LANGUAGE_VOCAB = {

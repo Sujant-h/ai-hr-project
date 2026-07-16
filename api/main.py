@@ -34,8 +34,7 @@ app = FastAPI(title="Recruiting AI API", version="1.0.0")
 
 import os
 from dotenv import load_dotenv
-
-load_dotenv()
+load_dotenv(override=True)
 
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler

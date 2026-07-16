@@ -354,7 +354,7 @@ NOT a recruiter and you make NO judgements.
 
 # TASK
 Extract every measurable requirement from the job advertisement:
-- skill        (technologies, tools, methods, domain skills)
+- skill        (technologies, tools, methods, domain skills, soft skills, field of study)
 - experience   (required years of professional experience)
 - language     (required spoken languages)
 - education    (required degree level)
@@ -527,13 +527,21 @@ def stellenprofil_agent_llm(text: str) -> list:
         if kind == "experience":
             m = re.search(r"\d{1,2}", str(value))
             if not m:
-                continue
-            value = int(m.group(0))
+                # E.g. general experience without years stated -> treat as skill
+                kind = "skill"
+            else:
+                value = int(m.group(0))
         elif kind == "education":
-            value = EDU_LEVELS.get(str(value).lower(), 0)
-            if value == 0:
+            mapped_val = EDU_LEVELS.get(str(value).lower(), -1)
+            if mapped_val == -1:
+                # E.g. a field of study or generic "Studium" -> treat as skill
+                kind = "skill"
+            elif mapped_val == 0:
+                # Explictly "kein Abschluss" - we do not treat this as a requirement
                 continue
-            label = f"Bildungsabschluss: {EDU_LABELS[int(value)]}"
+            else:
+                value = mapped_val
+                label = f"Bildungsabschluss: {EDU_LABELS[int(value)]}"
         importance = raw.get("importance", "muss")
         requirements.append(
             Requirement(

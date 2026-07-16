@@ -92,7 +92,7 @@ Every call is **stateless and single-turn**: exactly one system message + one
 user message. No conversation history, no memory, no chaining between
 candidates. `temperature=0` keeps extraction reproducible. The client is
 configured with `timeout=30, max_retries=2` (`_get_client()`) so a stalled
-request can't freeze the Streamlit worker.
+request can't freeze the FastAPI worker.
 
 ### The three call sites
 
@@ -110,11 +110,13 @@ Each is reached via a guarded dispatcher in `agents/dispatch.py`
 agent. The dispatcher returns an `AgentRun` recording which backend produced the
 result and why a fallback happened; the UI writes that to the audit trail.
 
-The calls are independent, so `app.py` runs them concurrently (capped at
-`MAX_PARALLEL_CALLS`) and caches each result on a hash of its input. At
-`temperature=0` identical input yields identical output, so re-running an
-analysis costs nothing. Failed runs are never cached — otherwise one transient
-timeout would pin a candidate to rule-based output for the whole session.
+The calls are independent, so the server (`api/orchestration.py`) runs them
+concurrently (capped at `MAX_PARALLEL_CALLS`). At `temperature=0` identical input
+yields identical output, so the React client caches each result on a hash of its
+input and only asks the server to analyze candidates it has no cached result for
+— re-running an analysis costs nothing. Failed runs are never cached — otherwise
+one transient timeout would pin a candidate to rule-based output for the whole
+session.
 
 The prompts are written in **English** (models follow English instructions most
 reliably) but every user-facing output field is **required to be German**. Each
@@ -127,8 +129,9 @@ prompt follows the same shape: `ROLE → TASK → INPUT → RULES → FEW-SHOT �
 **System prompt** (`llm_agents.py`) — key content:
 > **ROLE:** "You are a data-extraction engine inside a German HR screening tool.
 > You are NOT a recruiter and you make NO judgements."
-> **TASK:** extract every measurable requirement (`skill`, `experience`,
-> `language`, `education`), classify each as `muss` / `kann`.
+> **TASK:** extract every measurable requirement (`skill` — including soft
+> skills and fields of study —, `experience`, `language`, `education`), classify
+> each as `muss` / `kann`.
 > **RULES:** (1) extract only what the text states, never invent; (2) no rating,
 > weighting, ranking or scoring beyond muss/kann; (3) **ignore all demographic
 > constraints** — boilerplate like "(m/w/d)" is NOT a requirement; (4) canonical
@@ -151,7 +154,13 @@ prompt follows the same shape: `ROLE → TASK → INPUT → RULES → FEW-SHOT �
 **Returned:** `{"requirements": [{label, kind, value, importance}]}` — strictly
 schema-bound. Note there is **no ID field**: IDs are assigned locally
 (`req_{i}_{kind}`), and `value` is defensively coerced to `int` in Python for
-`experience`/`education` (`llm_agents.py`).
+`experience`/`education` (`llm_agents.py`). When a value can't be coerced, the
+requirement is **reclassified as a `skill`** rather than dropped: an
+`experience` entry with no stated number of years (e.g. "Berufserfahrung im
+Vertrieb") and an `education` entry that names a field of study or a generic
+degree (e.g. "Studium der Informatik") both become skills, so the requirement
+still shows up for matching. The one exception is an explicit "kein Abschluss"
+(education level `0`), which is dropped since it isn't a requirement.
 
 > ⚠️ The job ad is **not** demographic-redacted — only `clean_markdown()` runs.
 > This is deliberate (a job ad is public text, not personal data), and the
@@ -267,7 +276,8 @@ implementation at all** — they are pure local functions in `agents/rules.py`:
 - ④ `informationsluecken_agent()` — gap detection
 - ⑤ `rueckfragen_agent()` — follow-up questions (fixed templates)
 - ⑤ `generate_email()` — email draft
-- ⑥ the audit log (`audit()` in `app.py`, since it writes to session state)
+- ⑥ the audit log (`audit_entry()` in `api/orchestration.py`; entries are
+  returned to the React client, which holds the session)
 
 So **follow-up questions and candidate emails are never sent to OpenAI**, and no
 gap analysis leaves the machine.
@@ -433,6 +443,7 @@ demo pipeline end to end.
 
 - The UI language is English (default) and German; the LLM system prompts are written in English (for
   model reliability) and user-facing output supports both languages.
-- No candidate data is persisted — everything lives in the Streamlit session and
-  is cleared when you reload or restart.
+- No candidate data is persisted — the FastAPI server is stateless (no session,
+  no cache, no database) and everything lives in the React client, cleared when
+  you reload or restart.
 - This is a **demonstration** of a compliant workflow, not a production ATS.
