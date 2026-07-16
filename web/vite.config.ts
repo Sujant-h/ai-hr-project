@@ -18,6 +18,20 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Function form: Vite 8's Rolldown types manualChunks as a function,
+        // not the object map. Keeps React and the router in one vendor chunk
+        // shared across the lazy route chunks.
+        manualChunks(id: string) {
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom)\//.test(id)) {
+            return 'react';
+          }
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
