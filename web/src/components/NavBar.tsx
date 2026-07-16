@@ -27,7 +27,7 @@ export const NavBar: React.FC = () => {
       )}>
         {/* Brand */}
         <div className="flex-1 flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0 shrink" onClick={() => navigate('/')}>
-          <img src={LOGO_URL} alt="Recruiting AI" width={32} height={32} className="w-8 h-8 rounded-lg object-contain shadow-sm shrink-0" />
+          <img src={LOGO_URL} alt="Recruiting AI" width={32} height={32} fetchPriority="high" decoding="async" className="w-8 h-8 rounded-lg object-contain shadow-sm shrink-0" />
           <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight truncate">Recruiting AI</span>
           <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider hidden lg:inline-block shrink-0">
             Multi-Agent HR
