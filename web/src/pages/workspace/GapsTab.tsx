@@ -1,13 +1,15 @@
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSessionStore } from '../../store/session';
 
 export function GapsTab() {
+  const { t } = useTranslation();
   const analyses = useSessionStore((s) => s.analyses);
 
   if (!analyses.length) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-slate-100/50 p-6 text-center font-medium text-slate-500">
-        Noch keine Analyse durchgeführt.
+        {t('gaps.noAnalysis')}
       </div>
     );
   }
@@ -17,15 +19,13 @@ export function GapsTab() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-8">
-        <h2 className="mb-2 text-2xl font-bold text-slate-900">Informationslücken</h2>
-        <p className="text-slate-600">
-          Fehlende Informationen aus den Lebensläufen, die für das Matching relevant sind.
-        </p>
+        <h2 className="mb-2 text-2xl font-bold text-slate-900">{t('gaps.title')}</h2>
+        <p className="text-slate-600">{t('gaps.desc')}</p>
       </div>
 
       {!withGaps.length ? (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-6 text-center font-bold text-emerald-800">
-          🎉 Keine Informationslücken gefunden!
+          {t('gaps.none')}
         </div>
       ) : (
         <div className="flex flex-col gap-6">

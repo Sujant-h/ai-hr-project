@@ -36,7 +36,7 @@ def test_a_candidate_comes_back_matched_with_gaps_and_questions(client):
     analysis = response.json()["analyses"][0]
     assert analysis["candidate"]["matches"][0]["requirement_id"] == "r0"
     assert analysis["candidate"]["gaps"] is not None
-    assert analysis["backend"] == "regelbasiert"
+    assert analysis["backend"] == "rule-based"
 
 
 def test_every_analysis_reports_its_own_backend(client):
@@ -50,9 +50,9 @@ def test_every_analysis_reports_its_own_backend(client):
 def test_the_response_carries_the_batch_audit_trail(client):
     entries = client.post("/api/analysis", json=_payload()).json()["audit"]
     actions = [e["action"] for e in entries]
-    assert "Anforderungsabgleich durchgeführt" in actions
-    assert "Lücken analysiert" in actions
-    assert "Rückfragen generiert" in actions
+    assert "Requirements compared" in actions
+    assert "Gaps analyzed" in actions
+    assert "Follow-up questions generated" in actions
 
 
 def test_the_summary_counts_the_clients_cached_candidates_too(client):
@@ -64,10 +64,10 @@ def test_the_summary_counts_the_clients_cached_candidates_too(client):
 
     entries = client.post("/api/analysis", json=payload).json()["audit"]
 
-    summary = next(e for e in entries if e["action"] == "Anforderungsabgleich durchgeführt")
-    assert "3 Kandidat(en)" in summary["detail"]
+    summary = next(e for e in entries if e["action"] == "Requirements compared")
+    assert "3 candidate(s)" in summary["detail"]
     assert "2x LLM (gpt-4o-mini)" in summary["detail"]
-    assert "1x regelbasiert" in summary["detail"]
+    assert "1x rule-based" in summary["detail"]
 
 
 def test_a_fully_cached_rerun_still_reports_every_candidate(client):
@@ -75,16 +75,16 @@ def test_a_fully_cached_rerun_still_reports_every_candidate(client):
     Kandidat(en) geprüft" while N candidates sit on screen."""
     payload = _payload()
     payload["candidates"] = []
-    payload["cached_backends"] = ["regelbasiert"] * 3
+    payload["cached_backends"] = ["rule-based"] * 3
 
     response = client.post("/api/analysis", json=payload)
 
     assert response.status_code == 200
     assert response.json()["analyses"] == []
     summary = next(
-        e for e in response.json()["audit"] if e["action"] == "Anforderungsabgleich durchgeführt"
+        e for e in response.json()["audit"] if e["action"] == "Requirements compared"
     )
-    assert "3 Kandidat(en)" in summary["detail"]
+    assert "3 candidate(s)" in summary["detail"]
 
 
 def test_cached_backends_defaults_to_empty(client):

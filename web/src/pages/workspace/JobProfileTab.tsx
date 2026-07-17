@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +9,7 @@ import { useSessionStore } from '../../store/session';
 import { useScreening } from '../../hooks/useScreening';
 
 export function JobProfileTab() {
+  const { t } = useTranslation();
   const jobText = useSessionStore((s) => s.jobText);
   const setJobText = useSessionStore((s) => s.setJobText);
   const requirements = useSessionStore((s) => s.requirements);
@@ -26,17 +28,15 @@ export function JobProfileTab() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6">
-        <h2 className="mb-2 text-2xl font-bold text-slate-900">Stellenprofil definieren</h2>
-        <p className="text-slate-600">
-          Füge die Anforderungen der Stelle ein, um sie von der KI strukturieren zu lassen.
-        </p>
+        <h2 className="mb-2 text-2xl font-bold text-slate-900">{t('jobProfile.title')}</h2>
+        <p className="text-slate-600">{t('jobProfile.desc')}</p>
       </div>
 
       <textarea
         value={jobText}
         onChange={(e) => setJobText(e.target.value)}
-        placeholder="Fügen Sie hier die Stellenbeschreibung ein..."
-        aria-label="Stellenbeschreibung"
+        placeholder={t('jobProfile.placeholder')}
+        aria-label={t('jobProfile.ariaLabel')}
         className="mb-6 h-64 w-full resize-y rounded-2xl border border-slate-200 bg-white/80 p-5 font-medium text-slate-700 shadow-sm backdrop-blur transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
       />
 
@@ -46,13 +46,13 @@ export function JobProfileTab() {
         size="lg"
         className="rounded-xl border-0 bg-gradient-to-r from-indigo-600 to-blue-600 px-8 text-base font-bold text-white shadow-lg shadow-indigo-200 hover:from-indigo-500 hover:to-blue-500"
       >
-        {isPending ? 'Analysiere...' : '✨ Profil analysieren'}
+        {isPending ? t('jobProfile.analyzing') : t('jobProfile.analyze')}
       </Button>
 
       {requirements.length > 0 && (
         <div className="mt-12">
           <h3 className="mb-6 flex items-center gap-2 text-xl font-bold text-slate-900">
-            <CheckCircle className="text-emerald-500" size={24} /> Extrahierte Anforderungen
+            <CheckCircle className="text-emerald-500" size={24} /> {t('jobProfile.extractedReqs')}
           </h3>
           <div className="flex flex-col gap-3">
             {requirements.map((req) => (
@@ -70,7 +70,7 @@ export function JobProfileTab() {
                         : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
                     )}
                   >
-                    {req.importance === 'muss' ? 'Muss' : 'Kann'}
+                    {t(`importance.${req.importance}`)}
                   </Badge>
                 </CardContent>
               </Card>

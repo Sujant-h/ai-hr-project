@@ -10,7 +10,7 @@ type CandidateOut = components['schemas']['CandidateOut'];
 function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
   return {
     id: 'cand_0', name: 'Lena', source: 'cv.txt', raw_text: 'x', skills: [],
-    years: null, education: 0, education_label: 'unbekannt', languages: [],
+    years: null, education: 0, education_label: 'unknown', languages: [],
     email: null, matches: [], gaps: [], questions: [], ...over,
   };
 }
@@ -18,7 +18,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
 beforeEach(() => {
   useSessionStore.getState().reset();
   useSessionStore.getState().setAnalyses([
-    { candidate: candidate({ name: 'Lena Hoffmann' }), backend: 'regelbasiert', fallback_reason: null },
+    { candidate: candidate({ name: 'Lena Hoffmann' }), backend: 'rule-based', fallback_reason: null },
   ]);
 });
 

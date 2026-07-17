@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Mail } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiClient, type EmailOut } from '../../api/client';
 import { useSessionStore } from '../../store/session';
 
 export function QuestionsTab() {
+  const { t } = useTranslation();
   const analyses = useSessionStore((s) => s.analyses);
   const setError = useSessionStore((s) => s.setError);
   const [drafts, setDrafts] = useState<Record<string, EmailOut>>({});
@@ -14,7 +16,7 @@ export function QuestionsTab() {
   if (!analyses.length) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-slate-100/50 p-6 text-center font-medium text-slate-500">
-        Noch keine Analyse durchgeführt.
+        {t('questions.noAnalysis')}
       </div>
     );
   }
@@ -30,7 +32,7 @@ export function QuestionsTab() {
       });
       setDrafts((d) => ({ ...d, [id]: draft }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Entwurf fehlgeschlagen.');
+      setError(e instanceof Error ? e.message : t('questions.draftFailed'));
     } finally {
       setPending(null);
     }
@@ -39,10 +41,8 @@ export function QuestionsTab() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-8">
-        <h2 className="mb-2 text-2xl font-bold text-slate-900">Rückfragen & E-Mails</h2>
-        <p className="text-slate-600">
-          Vorgeschlagene Fragen und Entwürfe. Nichts wird automatisch versendet.
-        </p>
+        <h2 className="mb-2 text-2xl font-bold text-slate-900">{t('questions.title')}</h2>
+        <p className="text-slate-600">{t('questions.desc')}</p>
       </div>
 
       <div className="flex flex-col gap-8">
@@ -60,7 +60,7 @@ export function QuestionsTab() {
                 {candidate.questions.length ? (
                   <div className="mb-8">
                     <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-indigo-700">
-                      Vorgeschlagene Fragen
+                      {t('questions.suggested')}
                     </h4>
                     <ul className="space-y-2">
                       {candidate.questions.map((q, i) => (
@@ -77,7 +77,7 @@ export function QuestionsTab() {
                     </ul>
                   </div>
                 ) : (
-                  <p className="mb-8 italic text-slate-500">Keine offenen Rückfragen.</p>
+                  <p className="mb-8 italic text-slate-500">{t('questions.noOpen')}</p>
                 )}
 
                 {!draft ? (
@@ -86,17 +86,19 @@ export function QuestionsTab() {
                     disabled={pending === candidate.id || !candidate.questions.length}
                     className="rounded-xl bg-slate-900 font-semibold text-white shadow-md hover:bg-slate-800"
                   >
-                    {pending === candidate.id ? 'Erstelle Entwurf...' : '✉️ Entwurf erstellen'}
+                    {pending === candidate.id
+                      ? t('questions.drafting')
+                      : t('questions.createDraft')}
                   </Button>
                 ) : (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
                     <h4 className="mb-4 flex items-center gap-2 font-bold text-slate-900">
-                      <Mail className="text-slate-400" size={18} aria-hidden="true" /> Entwurf
-                      (Vorschau)
+                      <Mail className="text-slate-400" size={18} aria-hidden="true" />{' '}
+                      {t('questions.draftPreview')}
                     </h4>
                     <p className="mb-2 text-sm text-slate-500">
-                      <strong>An:</strong> {draft.to} &middot; <strong>Betreff:</strong>{' '}
-                      {draft.subject}
+                      <strong>{t('questions.to')}</strong> {draft.to} &middot;{' '}
+                      <strong>{t('questions.subject')}</strong> {draft.subject}
                     </p>
                     <pre className="mb-6 whitespace-pre-wrap rounded-lg border border-slate-100 bg-white p-4 font-sans text-sm leading-relaxed text-slate-600 shadow-sm">
                       {draft.body}
@@ -108,7 +110,7 @@ export function QuestionsTab() {
                       <a
                         href={`mailto:${encodeURIComponent(draft.to)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
                       >
-                        📧 In E-Mail-Programm öffnen
+                        {t('questions.openInMail')}
                       </a>
                     </Button>
                   </div>

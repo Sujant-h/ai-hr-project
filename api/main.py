@@ -14,14 +14,15 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Dep
 from pydantic import BaseModel
 
 import llm_agents
-from agents.dispatch import analyze_cv, analyze_job_profile, backend_label
+from agents.dispatch import analyze_cv, analyze_job_profile, backend_label, is_llm_active
 from agents.rules import generate_email
-from api.demo_data import DEMO_CVS, DEMO_JOB
+from api.demo_data import demo_cvs, demo_job
 from api.orchestration import analyze_candidates, audit_entry, batch_summary_entries, fallback_entries
 from api.schemas import (
     AuditEntryOut,
     CandidateAnalysisOut,
     CandidateOut,
+    Lang,
     RequirementOut,
     audit_to_out,
     candidate_from_in,
@@ -29,6 +30,7 @@ from api.schemas import (
     requirement_from_in,
     requirement_to_out,
 )
+from i18n import AGENT_CV, AGENT_JOB_PROFILE, DEFAULT_LANG, tr
 
 app = FastAPI(title="Recruiting AI API", version="1.0.0")
 
@@ -75,6 +77,10 @@ def verify_password(x_access_token: Optional[str] = Header(None)):
 
 class BackendOut(BaseModel):
     label: str
+    # `label` is display text and follows `lang`, so the client must not decide
+    # "is the LLM on?" by comparing it against a known string — that check would
+    # silently invert the moment the recruiter switched language.
+    is_llm: bool
 
 
 class DemoCvOut(BaseModel):
@@ -88,9 +94,9 @@ class DemoOut(BaseModel):
 
 
 @app.get("/api/backend", response_model=BackendOut)
-def get_backend() -> BackendOut:
+def get_backend(lang: Lang = DEFAULT_LANG) -> BackendOut:
     """Which backend is active, for the header badge."""
-    return BackendOut(label=backend_label())
+    return BackendOut(label=backend_label(lang), is_llm=is_llm_active())
 
 
 @app.get("/api/verify", dependencies=[Depends(verify_password)])
@@ -100,16 +106,19 @@ def get_verify():
 
 
 @app.get("/api/demo", response_model=DemoOut)
-def get_demo() -> DemoOut:
-    """Seed data for the "Demo-Daten laden" button."""
+def get_demo(lang: Lang = DEFAULT_LANG) -> DemoOut:
+    """Seed data for the "Load demo data" button, in the recruiter's language."""
     return DemoOut(
-        job_text=DEMO_JOB,
-        cvs=[DemoCvOut(name=name, text=text) for name, text in DEMO_CVS],
+        job_text=demo_job(lang),
+        cvs=[DemoCvOut(name=name, text=text) for name, text in demo_cvs(lang)],
     )
 
 
 class JobProfileIn(BaseModel):
     text: str
+    # Governs the prose the agents write back — requirement labels, notes, the
+    # audit trail. Never what gets extracted.
+    lang: Lang = DEFAULT_LANG
 
 
 class JobProfileOut(BaseModel):
@@ -122,13 +131,15 @@ class JobProfileOut(BaseModel):
 @limiter.limit(LIMIT_JOB_PROFILE)
 def post_job_profile(request: Request, payload: JobProfileIn) -> JobProfileOut:
     """① Stellenprofil-Agent: job ad -> measurable requirements."""
-    run = analyze_job_profile(payload.text)
-    entries = fallback_entries("Stellenprofil-Agent", run)
+    lang = payload.lang
+    run = analyze_job_profile(payload.text, lang)
+    entries = fallback_entries(AGENT_JOB_PROFILE, run, lang)
     entries.append(
         audit_entry(
-            "Stellenprofil-Agent",
-            "Stellenprofil analysiert",
-            f"{len(run.result)} Anforderungen erkannt (Backend: {run.backend}).",
+            AGENT_JOB_PROFILE,
+            tr("audit.job_profile.action", lang),
+            tr("audit.job_profile.detail", lang, count=len(run.result), backend=run.backend),
+            lang,
         )
     )
     return JobProfileOut(
@@ -170,24 +181,30 @@ async def post_cv(
     index: int = Form(0),
     text: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    lang: Lang = Form(DEFAULT_LANG),
 ) -> CvOut:
     """② CV-Agent: an uploaded or pasted CV -> a structured Candidate."""
     if file is not None:
         data = await file.read()
         if len(data) > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="Datei zu groß (max. 10 MB).")
+            raise HTTPException(status_code=413, detail=tr("error.file_too_large", lang))
         source = file.filename or "upload"
         cv_text = _upload_to_markdown(file, data)
     elif text:
-        source = "Eingefügter Text"
+        source = tr("source.pasted_text", lang)
         cv_text = llm_agents.clean_markdown(text)
     else:
-        raise HTTPException(status_code=422, detail="Weder Datei noch Text übermittelt.")
+        raise HTTPException(status_code=422, detail=tr("error.no_input", lang))
 
-    run = analyze_cv(name, source, cv_text, index)
-    entries = fallback_entries("CV-Agent", run)
+    run = analyze_cv(name, source, cv_text, index, lang)
+    entries = fallback_entries(AGENT_CV, run, lang)
     entries.append(
-        audit_entry("CV-Agent", "Lebenslauf analysiert", f"{name} verarbeitet (Backend: {run.backend}).")
+        audit_entry(
+            AGENT_CV,
+            tr("audit.cv.action", lang),
+            tr("audit.cv.detail", lang, name=name, backend=run.backend),
+            lang,
+        )
     )
     return CvOut(
         candidate=candidate_to_out(run.result),
@@ -202,8 +219,9 @@ class AnalysisIn(BaseModel):
     # Backend labels for the candidates the client served from its own cache.
     # The server never sees those candidates, but the audit summary has to
     # count them: a recruiter looking at 3 candidates must not read "0
-    # Kandidat(en) geprüft" just because nothing needed recomputing.
+    # candidate(s) checked" just because nothing needed recomputing.
     cached_backends: list[str] = []
+    lang: Lang = DEFAULT_LANG
 
 
 class AnalysisOut(BaseModel):
@@ -219,12 +237,13 @@ def post_analysis(request: Request, payload: AnalysisIn) -> AnalysisOut:
     The client sends only the candidates it has no cached result for, so there
     is nothing to cache here — and nothing to remember.
     """
+    lang = payload.lang
     requirements = [requirement_from_in(r) for r in payload.requirements]
     candidates = [candidate_from_in(c) for c in payload.candidates]
-    analyses, entries = analyze_candidates(requirements, candidates)
+    analyses, entries = analyze_candidates(requirements, candidates, lang)
     entries.extend(
         batch_summary_entries(
-            requirements, [a.backend for a in analyses] + payload.cached_backends
+            requirements, [a.backend for a in analyses] + payload.cached_backends, lang
         )
     )
     return AnalysisOut(
@@ -243,6 +262,7 @@ def post_analysis(request: Request, payload: AnalysisIn) -> AnalysisOut:
 class EmailIn(BaseModel):
     candidate: CandidateOut
     questions: list[str]
+    lang: Lang = DEFAULT_LANG
 
 
 class EmailOut(BaseModel):
@@ -257,5 +277,7 @@ def post_email(payload: EmailIn) -> EmailOut:
 
     The draft is never sent automatically; it is prepared for human review.
     """
-    to, subject, body = generate_email(candidate_from_in(payload.candidate), payload.questions)
+    to, subject, body = generate_email(
+        candidate_from_in(payload.candidate), payload.questions, payload.lang
+    )
     return EmailOut(to=to, subject=subject, body=body)

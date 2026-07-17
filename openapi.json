@@ -10,6 +10,22 @@
         "summary": "Get Backend",
         "description": "Which backend is active, for the header badge.",
         "operationId": "get_backend_api_backend_get",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "en",
+                "de"
+              ],
+              "type": "string",
+              "default": "en",
+              "title": "Lang"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -20,6 +36,61 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verify": {
+      "get": {
+        "summary": "Get Verify",
+        "description": "Verify that the access password is correct.",
+        "operationId": "get_verify_api_verify_get",
+        "parameters": [
+          {
+            "name": "x-access-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Access-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -27,8 +98,24 @@
     "/api/demo": {
       "get": {
         "summary": "Get Demo",
-        "description": "Seed data for the \"Demo-Daten laden\" button.",
+        "description": "Seed data for the \"Load demo data\" button, in the recruiter's language.",
         "operationId": "get_demo_api_demo_get",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "en",
+                "de"
+              ],
+              "type": "string",
+              "default": "en",
+              "title": "Lang"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -36,6 +123,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DemoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -48,15 +145,33 @@
         "summary": "Post Job Profile",
         "description": "① Stellenprofil-Agent: job ad -> measurable requirements.",
         "operationId": "post_job_profile_api_job_profile_post",
+        "parameters": [
+          {
+            "name": "x-access-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Access-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/JobProfileIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -87,15 +202,33 @@
         "summary": "Post Cv",
         "description": "② CV-Agent: an uploaded or pasted CV -> a structured Candidate.",
         "operationId": "post_cv_api_cv_post",
+        "parameters": [
+          {
+            "name": "x-access-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Access-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_post_cv_api_cv_post"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -126,15 +259,33 @@
         "summary": "Post Analysis",
         "description": "③④⑤ Matching + gaps + follow-up questions for every candidate sent.\n\nThe client sends only the candidates it has no cached result for, so there\nis nothing to cache here — and nothing to remember.",
         "operationId": "post_analysis_api_analysis_post",
+        "parameters": [
+          {
+            "name": "x-access-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Access-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AnalysisIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -225,6 +376,15 @@
             "type": "array",
             "title": "Cached Backends",
             "default": []
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ],
+            "title": "Lang",
+            "default": "en"
           }
         },
         "type": "object",
@@ -291,11 +451,16 @@
           "label": {
             "type": "string",
             "title": "Label"
+          },
+          "is_llm": {
+            "type": "boolean",
+            "title": "Is Llm"
           }
         },
         "type": "object",
         "required": [
-          "label"
+          "label",
+          "is_llm"
         ],
         "title": "BackendOut"
       },
@@ -332,6 +497,15 @@
               }
             ],
             "title": "File"
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ],
+            "title": "Lang",
+            "default": "en"
           }
         },
         "type": "object",
@@ -414,7 +588,7 @@
           "education_label": {
             "type": "string",
             "title": "Education Label",
-            "default": "unbekannt"
+            "default": ""
           },
           "languages": {
             "items": {
@@ -544,6 +718,15 @@
             },
             "type": "array",
             "title": "Questions"
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ],
+            "title": "Lang",
+            "default": "en"
           }
         },
         "type": "object",
@@ -594,6 +777,31 @@
             ],
             "title": "Importance",
             "default": "muss"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "skill",
+              "experience",
+              "education",
+              "language",
+              "contact",
+              "experience_years"
+            ],
+            "title": "Kind",
+            "default": "skill"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Value",
+            "default": ""
           }
         },
         "type": "object",
@@ -621,6 +829,15 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ],
+            "title": "Lang",
+            "default": "en"
           }
         },
         "type": "object",
@@ -699,6 +916,18 @@
           "note": {
             "type": "string",
             "title": "Note",
+            "default": ""
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Value",
             "default": ""
           }
         },

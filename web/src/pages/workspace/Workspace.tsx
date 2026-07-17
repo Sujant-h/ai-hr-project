@@ -15,7 +15,7 @@ import { GapsTab } from './GapsTab';
 import { QuestionsTab } from './QuestionsTab';
 
 export function Workspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const TABS = [
     { slug: 'stellenprofil', label: t('workspace.tab1'), Panel: JobProfileTab },
@@ -32,9 +32,12 @@ export function Workspace() {
   const isLlmActive = useSessionStore((s) => s.isLlmActive);
   const { fetchBackendLabel } = useScreening();
 
+  // Re-fetched on a language change: the label is prose built by the server
+  // ("rule-based" / "regelbasiert"), so it goes stale the moment the recruiter
+  // switches.
   useEffect(() => {
     void fetchBackendLabel();
-  }, [fetchBackendLabel]);
+  }, [fetchBackendLabel, i18n.language]);
 
   const requested = params.get('tab');
   const active = TABS.some((t) => t.slug === requested) ? requested! : DEFAULT_SLUG;
@@ -81,7 +84,7 @@ export function Workspace() {
 
           <Tabs.Root value={active} onValueChange={onValueChange}>
             <Tabs.List
-              aria-label="Screening-Schritte"
+              aria-label={t('workspace.tabsAria')}
               className="hide-scrollbar -mx-6 mb-8 flex snap-x snap-mandatory overflow-x-auto border-b border-slate-200 px-6 sm:mx-0 sm:snap-none sm:px-0"
             >
               {TABS.map((tab) => (

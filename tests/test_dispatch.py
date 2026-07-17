@@ -30,7 +30,7 @@ def llm_disabled(monkeypatch):
 
 def test_without_an_api_key_the_rule_based_backend_is_used(llm_disabled):
     run = analyze_job_profile("Python und SQL erforderlich")
-    assert run.backend == "regelbasiert"
+    assert run.backend == "rule-based"
     assert run.fallback_reason is None
     assert {r.label for r in run.result} >= {"Python", "SQL"}
 
@@ -40,7 +40,7 @@ def test_without_an_api_key_the_rule_based_backend_is_used(llm_disabled):
 
 def test_successful_llm_call_reports_the_llm_backend(llm_enabled, monkeypatch):
     sentinel = [Requirement(id="x", label="Python", kind="skill", value="Python")]
-    monkeypatch.setattr(llm_agents, "stellenprofil_agent_llm", lambda text: sentinel)
+    monkeypatch.setattr(llm_agents, "stellenprofil_agent_llm", lambda text, lang="en": sentinel)
 
     run = analyze_job_profile("egal")
     assert run.result is sentinel
@@ -59,7 +59,7 @@ def test_job_profile_falls_back_to_rules_on_llm_error(llm_enabled, monkeypatch):
     monkeypatch.setattr(llm_agents, "stellenprofil_agent_llm", _raise_llm_error)
 
     run = analyze_job_profile("Python und SQL erforderlich")
-    assert run.backend == "regelbasiert"
+    assert run.backend == "rule-based"
     assert "API timeout" in run.fallback_reason
     assert {r.label for r in run.result} >= {"Python", "SQL"}, "fallback must still produce results"
 
@@ -68,7 +68,7 @@ def test_cv_falls_back_to_rules_on_llm_error(llm_enabled, monkeypatch):
     monkeypatch.setattr(llm_agents, "cv_agent_llm", _raise_llm_error)
 
     run = analyze_cv("Test", "cv.txt", "Name: Test\nSkills: Python", 0)
-    assert run.backend == "regelbasiert"
+    assert run.backend == "rule-based"
     assert "API timeout" in run.fallback_reason
     assert "Python" in run.result.skills
 
@@ -79,7 +79,7 @@ def test_matching_falls_back_to_rules_on_llm_error(llm_enabled, monkeypatch):
     reqs = [Requirement(id="r0", label="Python", kind="skill", value="Python")]
 
     run = match_candidate(cand, reqs)
-    assert run.backend == "regelbasiert"
+    assert run.backend == "rule-based"
     assert "API timeout" in run.fallback_reason
     assert run.result[0].status == "erfuellt"
 
@@ -102,6 +102,6 @@ def test_a_successful_run_logs_no_fallback():
 def test_a_failed_run_logs_the_reason():
     from api.orchestration import fallback_entries
     entries = fallback_entries(
-        "CV-Agent", AgentRun(result=None, backend="regelbasiert", fallback_reason="boom")
+        "CV-Agent", AgentRun(result=None, backend="rule-based", fallback_reason="boom")
     )
     assert [e.detail for e in entries] == ["boom"]

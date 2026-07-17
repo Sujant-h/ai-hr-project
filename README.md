@@ -20,15 +20,15 @@ a small "agent" (a pure function that takes input and returns structured data):
 
 | Step | Tab | Agent | What it does |
 |------|-----|-------|--------------|
-| ① | **Stellenprofil** | `stellenprofil_agent` | Extracts measurable requirements (skills, years of experience, education, languages) from a job ad and tags each as `muss` (mandatory) or `kann` (nice-to-have). |
-| ② | **Bewerbungen** | `cv_agent` | Parses candidate CVs (pasted text or uploaded PDF) into a structured `Candidate` (name, email, skills, experience, education, languages). |
-| ③ | **Kandidaten** | `matching_agent` | Compares each candidate against every requirement and assigns a status: `erfuellt` (met), `teilweise` (partial), `offen` (not mentioned), or `nicht_erfuellt` (contradicted) — **no scores, no ranking.** |
-| ④ | **Informationslücken** | `informationsluecken_agent` | Lists the gaps where the CV does not clearly answer a requirement. |
-| ⑤ | **Rückfragen** | `rueckfragen_agent` + `generate_email` | Generates neutral follow-up questions and drafts a candidate email. |
+| ① | **Job Profile** | `stellenprofil_agent` | Extracts measurable requirements (skills, years of experience, education, languages) from a job ad and tags each as `muss` (mandatory) or `kann` (nice-to-have). |
+| ② | **Applications** | `cv_agent` | Parses candidate CVs (pasted text or uploaded PDF) into a structured `Candidate` (name, email, skills, experience, education, languages). |
+| ③ | **Candidates** | `matching_agent` | Compares each candidate against every requirement and assigns a status: `erfuellt` (met), `teilweise` (partial), `offen` (not mentioned), or `nicht_erfuellt` (contradicted) — **no scores, no ranking.** |
+| ④ | **Information Gaps** | `informationsluecken_agent` | Lists the gaps where the CV does not clearly answer a requirement. |
+| ⑤ | **Clarifying Questions** | `rueckfragen_agent` + `generate_email` | Generates neutral follow-up questions and drafts a candidate email. |
 | ⑥ | **Audit Log** | — | A timestamped trail of every agent action, for transparency and traceability. |
 
 There is also an immersive landing/intro page, a home page, and a per-candidate
-detail view. A **"Demo-Daten laden"** button loads a sample job profile plus
+detail view. A **"Load demo data"** button loads a sample job profile plus
 three sample applications so you can try the whole flow instantly.
 
 ### Two interchangeable backends
@@ -47,7 +47,7 @@ If the LLM backend is unavailable (no key, package missing, or an API error),
 the app **transparently falls back** to the rule-based agents. The fallback is
 decided per item in `agents/dispatch.py`, so one candidate's failed API call
 does not change how the others were processed — and the audit log records what
-actually ran for each (e.g. `2x LLM (gpt-4o-mini), 1x regelbasiert`).
+actually ran for each (e.g. `2x LLM (gpt-4o-mini), 1x rule-based`).
 
 ### Built-in compliance guardrails
 
@@ -119,7 +119,11 @@ one transient timeout would pin a candidate to rule-based output for the whole
 session.
 
 The prompts are written in **English** (models follow English instructions most
-reliably) but every user-facing output field is **required to be German**. Each
+reliably). The language of the prose the model writes back is **not** baked into
+the prompt: an `OUTPUT LANGUAGE` section naming the recruiter's language is
+appended per request (`_language_directive`), and it comes last so it overrides
+the language of the few-shot examples. Canonical values (skills, spoken
+languages) stay English regardless — they are matching keys, not prose. Each
 prompt follows the same shape: `ROLE → TASK → INPUT → RULES → FEW-SHOT → OUTPUT`.
 
 ---
@@ -127,7 +131,7 @@ prompt follows the same shape: `ROLE → TASK → INPUT → RULES → FEW-SHOT �
 #### ① Stellenprofil-Agent — job ad → requirements
 
 **System prompt** (`llm_agents.py`) — key content:
-> **ROLE:** "You are a data-extraction engine inside a German HR screening tool.
+> **ROLE:** "You are a data-extraction engine inside an HR screening tool.
 > You are NOT a recruiter and you make NO judgements."
 > **TASK:** extract every measurable requirement (`skill` — including soft
 > skills and fields of study —, `experience`, `language`, `education`), classify
@@ -135,8 +139,9 @@ prompt follows the same shape: `ROLE → TASK → INPUT → RULES → FEW-SHOT �
 > **RULES:** (1) extract only what the text states, never invent; (2) no rating,
 > weighting, ranking or scoring beyond muss/kann; (3) **ignore all demographic
 > constraints** — boilerplate like "(m/w/d)" is NOT a requirement; (4) canonical
-> German names; (5) all labels in German.
-> Plus a **few-shot example** mapping a sample German job ad to exact JSON.
+> English names for skills and languages; (5) labels in the language named under
+> `OUTPUT LANGUAGE`.
+> Plus a **few-shot example** mapping a sample job ad to exact JSON.
 
 **Data sent (user message):**
 ```
@@ -214,8 +219,9 @@ the model structurally cannot return one.
 > evidence, incl. semantic equivalents — PostgreSQL satisfies SQL), `teilweise`
 > (partial), `offen` (not mentioned), `nicht_erfuellt` (explicitly contradicted).
 > **RULES:** (1) **no ranking, no scoring, no percentages, no hire/reject
-> recommendation**; (2) **explainability** — every note must state in German
-> *where* the evidence was found ("Im Lebenslauf unter 'Projekte' genannt");
+> recommendation**; (2) **explainability** — every note must state *where* the
+> evidence was found ("Named in the CV under 'Projekte'"), in the language named
+> under `OUTPUT LANGUAGE`;
 > (3) judge only against the CV text, no world knowledge about the person
 > (semantic knowledge about *technologies* is allowed); (4) demographic data must
 > never influence a status; (5) when in doubt, choose `teilweise` and explain.
@@ -235,7 +241,7 @@ the model structurally cannot return one.
 # TASK
 Compare the CV against EVERY requirement id listed above and return one
 result per id. Follow only the rules from the system prompt: no ranking,
-no scoring, evidence-based status with a German note.
+no scoring, evidence-based status with the note in the requested language.
 ```
 
 This is the "R" in RAG: exactly the two documents needed, nothing else.
@@ -345,13 +351,17 @@ ai-hr-project/
 │   ├── main.py            # REST endpoints
 │   ├── orchestration.py   # Core HR workflow pipelines
 │   └── schemas.py         # Pydantic schemas mapping to UI
+│   └── demo_data.py       # Sample job ad + CVs, per language
 ├── web/                   # Vite + React + Zustand frontend
 │   ├── src/pages/         # React views (Home, Workspace)
+│   ├── src/i18n/          # i18next setup + en/de catalogues
 │   └── src/api/           # Auto-generated OpenAPI TypeScript client
 ├── agents/                # HR logic (rule-based and LLM agents)
 │   ├── rules.py           # Rule-based agents — pure functions
 │   └── dispatch.py        # LLM first, rule-based fallback
 ├── llm_agents.py          # OpenAI backend
+├── i18n.py                # Agent-facing strings, per language
+├── vocabulary.py          # Canonical skill/language names, shared by both backends
 ├── models.py              # Shared dataclasses
 ├── tests/                 # pytest suite
 └── requirements.txt       # Python dependencies (pinned)
@@ -360,6 +370,52 @@ ai-hr-project/
 The application is cleanly decoupled: the React frontend in `web/` communicates via REST with the FastAPI server in `api/`.
 The agents are pure functions, which is what lets the whole pipeline — including the LLM-failure
 fallback path — be tested without a web server or an API key.
+
+---
+
+## Language
+
+The UI is **English by default** and German on request, switchable from the header
+and remembered in `localStorage`. The browser's own locale is never consulted —
+being served a German UI you did not ask for is the bug this design replaced.
+
+The agents write prose the recruiter reads, so language cannot stop at the React
+layer. Every API call carries a `lang` (`en` | `de`), and the backend builds its
+requirement labels, match notes, gap descriptions, follow-up questions, e-mail
+drafts and audit entries from `i18n.py` in that language. The LLM path gets the
+same treatment through an `OUTPUT LANGUAGE` directive appended to its prompt.
+
+The line that keeps this from becoming a logic bug:
+
+| | Example | Language | Rendered by |
+|---|---|---|---|
+| **Codes** — compared in Python | `status`, `importance`, `kind`, education level | never translated | frontend catalogue |
+| **Canonical values** — matching keys | `Requirement.value`, `Candidate.skills`, `languages` | always English | shown as-is (or via `language_display`) |
+| **Prose** — only ever read | labels, notes, gaps, questions, audit | follows `lang` | backend `i18n.py` |
+
+A canonical value that moved with the UI language would make `Englisch` stop
+satisfying `English` the moment a recruiter flipped the switch, so `SKILL_VOCAB`
+and `LANGUAGE_VOCAB` (in `vocabulary.py`, shared by both backends) key on English
+names and keep their *detection synonyms* multilingual — the synonyms are matched
+against the document, whose language has nothing to do with the UI's. For the
+same reason `rueckfragen_agent` chooses a question by `Gap.kind` rather than by
+reading the gap's label.
+
+The LLM backend is **told** to emit canonical English, but an instruction is a
+request, not a guarantee: tested against the real API, `gpt-4o-mini` honours it
+for languages and ignores it for skills, returning `Projektmanagement` for a
+German ad. `vocabulary.canonicalize` therefore normalises the model's output
+through the same synonym table — that, not the prompt, is what holds the
+invariant. `canonicalize_all` additionally drops the duplicates collapsing can
+create (`Projektmanagement` + `Scrum` are one canonical), which would otherwise
+reach the UI as a React key collision and an inflated skill count.
+
+Content already on screen keeps the language it was generated in; re-running an
+analysis regenerates it. The audit log is deliberately left alone — it is a
+historical record of what actually ran.
+
+`tests/test_i18n.py` and `web/src/i18n/config.test.ts` pin all of the above,
+including that the two catalogues define exactly the same keys.
 
 ---
 
@@ -417,9 +473,11 @@ Vite will print a local URL (typically **http://localhost:5173**) and open it in
 
 ### 5. Try it out
 
-- Click **"✨ Demo-Daten laden"** to load a sample job and three candidates, or
-- Paste your own job description in **① Stellenprofil**, add CVs in
-  **② Bewerbungen**, then review the results in the following tabs.
+- Click **"✨ Load Demo Data"** to load a sample job and three candidates, or
+- Paste your own job description in **① Job Profile**, add CVs in
+  **② Applications**, then review the results in the following tabs.
+- Use the **EN/DE** button in the header to switch language. English is the
+  default; the choice is remembered across reloads.
 
 The header shows which backend is active (rule-based vs. LLM). Without an API key
 the workspace says so explicitly: the rule-based fallback only knows a fixed
@@ -441,8 +499,11 @@ demo pipeline end to end.
 
 ## Notes
 
-- The UI language is English (default) and German; the LLM system prompts are written in English (for
-  model reliability) and user-facing output supports both languages.
+- The UI language is English (default) and German, switchable from the header and
+  remembered in `localStorage`. Every API call carries a `lang`, so the prose the
+  agents generate — match notes, gaps, follow-up questions, e-mail drafts and the
+  audit trail — comes back in that language too. The LLM system prompts stay
+  English (for model reliability) and name the output language explicitly.
 - No candidate data is persisted — the FastAPI server is stateless (no session,
   no cache, no database) and everything lives in the React client, cleared when
   you reload or restart.

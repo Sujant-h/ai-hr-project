@@ -20,29 +20,29 @@ def test_diplomarbeit_does_not_imply_a_diplom():
     'diplom' matching as a substring of 'Diplomarbeit' promoted the candidate
     to Master level (3).
     """
-    level, label = rules._detect_education("Ausbildung: Bachelor Informatik\nDiplomarbeit über Netzwerke")
-    assert level == EDU_LEVELS["bachelor"], f"expected Bachelor, got {label!r}"
+    level = rules._detect_education("Ausbildung: Bachelor Informatik\nDiplomarbeit über Netzwerke")
+    assert level == EDU_LEVELS["bachelor"], f"expected Bachelor, got level {level!r}"
 
 
 def test_masterarbeit_does_not_imply_a_master():
-    level, label = rules._detect_education("Bachelor Informatik\nMasterarbeit noch offen")
-    assert level == EDU_LEVELS["bachelor"], f"expected Bachelor, got {label!r}"
+    level = rules._detect_education("Bachelor Informatik\nMasterarbeit noch offen")
+    assert level == EDU_LEVELS["bachelor"], f"expected Bachelor, got level {level!r}"
 
 
 def test_bare_ausbildung_section_header_is_not_a_qualification():
     """'Ausbildung' is a near-universal CV section header — on its own it says
     nothing about a completed qualification."""
-    level, label = rules._detect_education("Ausbildung\n- Praktikum bei Firma X")
+    level = rules._detect_education("Ausbildung\n- Praktikum bei Firma X")
     assert level == 0, f"expected no qualification, got {label!r}"
 
 
 def test_real_ausbildung_is_still_detected():
-    level, _ = rules._detect_education("Abgeschlossene Ausbildung als Fachinformatiker")
+    level = rules._detect_education("Abgeschlossene Ausbildung als Fachinformatiker")
     assert level == EDU_LEVELS["ausbildung"]
 
 
 def test_highest_degree_wins():
-    level, _ = rules._detect_education("Bachelor Informatik, danach Master Data Science")
+    level = rules._detect_education("Bachelor Informatik, danach Master Data Science")
     assert level == EDU_LEVELS["master"]
 
 
@@ -52,7 +52,7 @@ def test_highest_degree_wins():
 def test_language_stated_as_a_compound_is_found():
     """German ads say 'Englischkenntnisse', not 'Englisch'. Whole-word matching
     alone missed the language requirement entirely."""
-    assert "Englisch" in rules._find_terms("Sehr gute Deutsch- und Englischkenntnisse", rules.LANGUAGE_VOCAB)
+    assert "English" in rules._find_terms("Sehr gute Deutsch- und Englischkenntnisse", rules.LANGUAGE_VOCAB)
 
 
 def test_hyphenated_compound_is_found():
@@ -97,7 +97,7 @@ def test_optional_skill_found_via_synonym_stays_optional():
 
 def test_optional_skill_found_via_second_synonym_stays_optional():
     reqs = rules.stellenprofil_agent("Anforderungen:\n- Scrum von Vorteil\n")
-    assert _importance_of(reqs, "Projektmanagement") == "kann"
+    assert _importance_of(reqs, "Project Management") == "kann"
 
 
 def test_mandatory_skill_stays_mandatory():

@@ -1,4 +1,30 @@
 {
+  "language": {
+    "en": "English",
+    "de": "Deutsch",
+    "switchTo": "Zu {{language}} wechseln"
+  },
+  "errors": {
+    "rateLimited": "Zu viele Anfragen. Bitte einen Moment warten und erneut versuchen.",
+    "unauthorized": "Ungültiger oder fehlender Zugangs-Code (Passwort).",
+    "unknown": "Unbekannter Fehler.",
+    "dismiss": "Fehlermeldung schließen"
+  },
+  "access": {
+    "verifying": "Zugang wird geprüft...",
+    "deniedTitle": "Zugriff verweigert",
+    "deniedDesc": "Bitte nutzen Sie den QR-Code oder den speziellen Link aus der Präsentation, um auf die App zuzugreifen."
+  },
+  "status": {
+    "erfuellt": "Erfüllt",
+    "teilweise": "Teilweise",
+    "offen": "Offen",
+    "nicht_erfuellt": "Nicht erfüllt"
+  },
+  "importance": {
+    "muss": "Muss",
+    "kann": "Kann"
+  },
   "nav": {
     "problem": "Das Problem",
     "solution": "Die Lösung",
@@ -67,7 +93,9 @@
     "plan3F2": "Eigene Modelle / API",
     "plan3F3": "Audit-Export",
     "ctaTitle": "Bereit f\u00fcr den ersten Screening-Lauf?",
-    "ctaDesc": "Starte in Sekunden \u2014 ganz ohne Setup."
+    "ctaDesc": "Starte in Sekunden \u2014 ganz ohne Setup.",
+    "solutionImgAlt": "Illustration des Agenten-Teams",
+    "resultsImgAlt": "Strukturierte Kandidatendaten und Qualifikationscheckliste"
   },
   "upload": {
     "title": "Bewerbungen hochladen",
@@ -82,7 +110,44 @@
     "remove": "entfernen",
     "analyzeFirst": "Zuerst ein Stellenprofil unter \u2460 analysieren \u2014 ohne Anforderungen gibt es nichts abzugleichen.",
     "analyzing": "Analysiere...",
-    "startAnalysis": "Gesamtanalyse starten"
+    "startAnalysis": "Gesamtanalyse starten",
+    "chooseFilesAria": "Dateien auswählen",
+    "removeAria": "{{name}} entfernen"
+  },
+  "jobProfile": {
+    "title": "Stellenprofil definieren",
+    "desc": "Füge die Anforderungen der Stelle ein, um sie von der KI strukturieren zu lassen.",
+    "placeholder": "Fügen Sie hier die Stellenbeschreibung ein...",
+    "ariaLabel": "Stellenbeschreibung",
+    "analyzing": "Analysiere...",
+    "analyze": "✨ Profil analysieren",
+    "extractedReqs": "Extrahierte Anforderungen"
+  },
+  "gaps": {
+    "noAnalysis": "Noch keine Analyse durchgeführt.",
+    "title": "Informationslücken",
+    "desc": "Fehlende Informationen aus den Lebensläufen, die für das Matching relevant sind.",
+    "none": "🎉 Keine Informationslücken gefunden!"
+  },
+  "questions": {
+    "noAnalysis": "Noch keine Analyse durchgeführt.",
+    "title": "Rückfragen & E-Mails",
+    "desc": "Vorgeschlagene Fragen und Entwürfe. Nichts wird automatisch versendet.",
+    "suggested": "Vorgeschlagene Fragen",
+    "noOpen": "Keine offenen Rückfragen.",
+    "drafting": "Erstelle Entwurf...",
+    "createDraft": "✉️ Entwurf erstellen",
+    "draftPreview": "Entwurf (Vorschau)",
+    "to": "An:",
+    "subject": "Betreff:",
+    "openInMail": "📧 In E-Mail-Programm öffnen",
+    "draftFailed": "Entwurf fehlgeschlagen."
+  },
+  "audit": {
+    "title": "Audit Log",
+    "desc": "Jeder Verarbeitungsschritt wird lückenlos dokumentiert.",
+    "clear": "🗑️ Audit Log leeren",
+    "empty": "Noch keine Aktivität protokolliert."
   },
   "candidates": {
     "working": "\u23f3 Die Agenten arbeiten im Hintergrund...",
@@ -117,6 +182,7 @@
     "title": "Dein Screening-Arbeitsbereich",
     "desc": "Stellenprofil definieren, Bewerbungen analysieren und Ergebnisse transparent pr\u00fcfen \u2014 die Entscheidung bleibt bei dir.",
     "noLlm": "Kein LLM aktiv:",
-    "sandbox": "Die Agenten laufen im regelbasierten Sandbox-Modus."
+    "sandbox": "Die Agenten laufen im regelbasierten Sandbox-Modus.",
+    "tabsAria": "Screening-Schritte"
   }
 }

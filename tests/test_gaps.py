@@ -57,5 +57,5 @@ def test_satisfied_requirements_produce_no_gap():
 def test_missing_contact_details_are_treated_as_a_must():
     cand = Candidate(id="c0", name="T", source="t", raw_text="x", email=None, years=5)
     gaps = rules.informationsluecken_agent(cand, [])
-    contact = next(g for g in gaps if g.requirement_label == "Kontaktdaten")
+    contact = next(g for g in gaps if g.kind == "contact")
     assert contact.importance == "muss"

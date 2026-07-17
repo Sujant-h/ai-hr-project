@@ -7,12 +7,17 @@ type Status = MatchResultOut['status'];
  * All four statuses render distinctly. Collapsing `offen` into `nicht_erfuellt`
  * would hide the difference between "the CV does not say" and "the CV says no" —
  * exactly the distinction a recruiter needs to decide whether to ask.
+ *
+ * The status itself is a language-neutral code from the API (api/schemas.py).
+ * Its label is a translation key, resolved by the component that renders it:
+ * a module-level constant would be captured once and never follow a language
+ * switch.
  */
-export const STATUS_LABEL: Record<Status, string> = {
-  erfuellt: 'Erfüllt',
-  teilweise: 'Teilweise',
-  offen: 'Offen',
-  nicht_erfuellt: 'Nicht erfüllt',
+export const STATUS_LABEL_KEY: Record<Status, string> = {
+  erfuellt: 'status.erfuellt',
+  teilweise: 'status.teilweise',
+  offen: 'status.offen',
+  nicht_erfuellt: 'status.nicht_erfuellt',
 };
 
 export const STATUS_CLASS: Record<Status, string> = {

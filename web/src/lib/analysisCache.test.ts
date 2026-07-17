@@ -23,7 +23,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
     skills: ['Python'],
     years: null,
     education: 0,
-    education_label: 'unbekannt',
+    education_label: 'unknown',
     languages: [],
     email: null,
     matches: [],
@@ -34,7 +34,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
 }
 
 function analysis(over: Partial<CandidateAnalysisOut> = {}): CandidateAnalysisOut {
-  return { candidate: candidate(), backend: 'regelbasiert', fallback_reason: null, ...over };
+  return { candidate: candidate(), backend: 'rule-based', fallback_reason: null, ...over };
 }
 
 describe('cacheKey', () => {

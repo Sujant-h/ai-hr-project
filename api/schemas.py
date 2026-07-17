@@ -20,6 +20,8 @@ from models import AuditEntry, Candidate, Gap, MatchResult, Requirement
 Kind = Literal["skill", "experience", "education", "language"]
 Importance = Literal["muss", "kann"]
 Status = Literal["erfuellt", "teilweise", "offen", "nicht_erfuellt"]
+GapKind = Literal["skill", "experience", "education", "language", "contact", "experience_years"]
+Lang = Literal["en", "de"]
 
 
 class RequirementOut(BaseModel):
@@ -37,12 +39,15 @@ class MatchResultOut(BaseModel):
     importance: Importance
     status: Status
     note: str = ""
+    value: str | int = ""
 
 
 class GapOut(BaseModel):
     requirement_label: str
     description: str
     importance: Importance = "muss"
+    kind: GapKind = "skill"
+    value: str | int = ""
 
 
 class CandidateOut(BaseModel):
@@ -53,7 +58,7 @@ class CandidateOut(BaseModel):
     skills: list[str] = []
     years: Optional[int] = None
     education: int = 0
-    education_label: str = "unbekannt"
+    education_label: str = ""
     languages: list[str] = []
     email: Optional[str] = None
     matches: list[MatchResultOut] = []
