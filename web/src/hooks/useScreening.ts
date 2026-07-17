@@ -1,13 +1,14 @@
 import { useCallback, useRef } from 'react';
 import { apiClient, ApiError } from '../api/client';
 import type { CandidateAnalysisOut } from '../api/client';
+import i18n from '../i18n/config';
 import { useSessionStore } from '../store/session';
 import { AnalysisCache } from '../lib/analysisCache';
 
 function messageOf(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof Error) return e.message;
-  return 'Unbekannter Fehler.';
+  return i18n.t('errors.unknown');
 }
 
 export function useScreening() {
@@ -18,8 +19,8 @@ export function useScreening() {
 
   const fetchBackendLabel = useCallback(async () => {
     try {
-      const { label } = await apiClient.getBackend();
-      useSessionStore.getState().setBackendLabel(label);
+      const { label, is_llm } = await apiClient.getBackend();
+      useSessionStore.getState().setBackend(label, is_llm);
     } catch {
       // A missing backend label must not block the workspace; the banner just
       // stays in its "unknown" state.

@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Verify
+         * @description Verify that the access password is correct.
+         */
+        get: operations["get_verify_api_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/demo": {
         parameters: {
             query?: never;
@@ -33,7 +53,7 @@ export interface paths {
         };
         /**
          * Get Demo
-         * @description Seed data for the "Demo-Daten laden" button.
+         * @description Seed data for the "Load demo data" button, in the recruiter's language.
          */
         get: operations["get_demo_api_demo_get"];
         put?: never;
@@ -144,6 +164,12 @@ export interface components {
              * @default []
              */
             cached_backends: string[];
+            /**
+             * Lang
+             * @default en
+             * @enum {string}
+             */
+            lang: "en" | "de";
         };
         /** AnalysisOut */
         AnalysisOut: {
@@ -167,6 +193,8 @@ export interface components {
         BackendOut: {
             /** Label */
             label: string;
+            /** Is Llm */
+            is_llm: boolean;
         };
         /** Body_post_cv_api_cv_post */
         Body_post_cv_api_cv_post: {
@@ -181,6 +209,12 @@ export interface components {
             text?: string | null;
             /** File */
             file?: string | null;
+            /**
+             * Lang
+             * @default en
+             * @enum {string}
+             */
+            lang: "en" | "de";
         };
         /**
          * CandidateAnalysisOut
@@ -220,7 +254,7 @@ export interface components {
             education: number;
             /**
              * Education Label
-             * @default unbekannt
+             * @default
              */
             education_label: string;
             /**
@@ -273,6 +307,12 @@ export interface components {
             candidate: components["schemas"]["CandidateOut"];
             /** Questions */
             questions: string[];
+            /**
+             * Lang
+             * @default en
+             * @enum {string}
+             */
+            lang: "en" | "de";
         };
         /** EmailOut */
         EmailOut: {
@@ -295,6 +335,17 @@ export interface components {
              * @enum {string}
              */
             importance: "muss" | "kann";
+            /**
+             * Kind
+             * @default skill
+             * @enum {string}
+             */
+            kind: "skill" | "experience" | "education" | "language" | "contact" | "experience_years";
+            /**
+             * Value
+             * @default
+             */
+            value: string | number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -305,6 +356,12 @@ export interface components {
         JobProfileIn: {
             /** Text */
             text: string;
+            /**
+             * Lang
+             * @default en
+             * @enum {string}
+             */
+            lang: "en" | "de";
         };
         /** JobProfileOut */
         JobProfileOut: {
@@ -341,6 +398,11 @@ export interface components {
              * @default
              */
             note: string;
+            /**
+             * Value
+             * @default
+             */
+            value: string | number;
         };
         /** RequirementOut */
         RequirementOut: {
@@ -381,7 +443,9 @@ export type $defs = Record<string, never>;
 export interface operations {
     get_backend_api_backend_get: {
         parameters: {
-            query?: never;
+            query?: {
+                lang?: "en" | "de";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -397,11 +461,53 @@ export interface operations {
                     "application/json": components["schemas"]["BackendOut"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_verify_api_verify_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-access-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     get_demo_api_demo_get: {
         parameters: {
-            query?: never;
+            query?: {
+                lang?: "en" | "de";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -417,12 +523,23 @@ export interface operations {
                     "application/json": components["schemas"]["DemoOut"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     post_job_profile_api_job_profile_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-access-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -455,7 +572,9 @@ export interface operations {
     post_cv_api_cv_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-access-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -488,7 +607,9 @@ export interface operations {
     post_analysis_api_analysis_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-access-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

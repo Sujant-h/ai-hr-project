@@ -13,7 +13,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
     skills: [],
     years: null,
     education: 0,
-    education_label: 'unbekannt',
+    education_label: 'unknown',
     languages: [],
     email: null,
     matches: [],
@@ -26,14 +26,24 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
 beforeEach(() => useSessionStore.getState().reset());
 
 describe('backend label', () => {
-  it('treats the exact string regelbasiert as no LLM', () => {
-    useSessionStore.getState().setBackendLabel('regelbasiert');
+  it('takes isLlmActive from the server, not from the label', () => {
+    useSessionStore.getState().setBackend('rule-based', false);
     expect(useSessionStore.getState().isLlmActive).toBe(false);
+
+    useSessionStore.getState().setBackend('LLM (gpt-4o-mini)', true);
+    expect(useSessionStore.getState().isLlmActive).toBe(true);
   });
 
-  it('treats an LLM label as active', () => {
-    useSessionStore.getState().setBackendLabel('LLM (gpt-4o-mini)');
-    expect(useSessionStore.getState().isLlmActive).toBe(true);
+  it('does not infer the backend from a translated label', () => {
+    // The label follows the recruiter's language. This store used to derive
+    // isLlmActive by comparing it to the literal "regelbasiert", which made the
+    // "no LLM active" banner wrong in every language but German. Both spellings
+    // of the same backend must land on the same flag.
+    useSessionStore.getState().setBackend('regelbasiert', false);
+    expect(useSessionStore.getState().isLlmActive).toBe(false);
+
+    useSessionStore.getState().setBackend('rule-based', false);
+    expect(useSessionStore.getState().isLlmActive).toBe(false);
   });
 
   it('is unknown before the backend has been asked, so the banner cannot assume', () => {
@@ -76,7 +86,7 @@ describe('reset', () => {
     s.setJobText('x');
     s.addCandidate(candidate());
     s.setError('boom');
-    s.setBackendLabel('LLM (gpt-4o-mini)');
+    s.setBackend('LLM (gpt-4o-mini)', true);
     s.reset();
 
     const after = useSessionStore.getState();

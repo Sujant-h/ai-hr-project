@@ -22,7 +22,7 @@ def test_a_pasted_cv_becomes_a_structured_candidate(client):
     body = response.json()
     assert body["candidate"]["email"] == "lena@example.com"
     assert "Python" in body["candidate"]["skills"]
-    assert body["backend"] == "regelbasiert"
+    assert body["backend"] == "rule-based"
 
 
 def test_an_uploaded_text_file_becomes_a_candidate(client):
@@ -37,7 +37,7 @@ def test_an_uploaded_text_file_becomes_a_candidate(client):
 
 def test_the_response_carries_its_own_audit_trail(client):
     response = client.post("/api/cv", data={"name": "Lena", "text": CV_TEXT, "index": 0})
-    assert any(e["agent"] == "CV-Agent" for e in response.json()["audit"])
+    assert any(e["agent"] == "CV Agent" for e in response.json()["audit"])
 
 
 def test_an_oversized_upload_is_rejected(client):

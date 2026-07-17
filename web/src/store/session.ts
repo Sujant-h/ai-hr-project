@@ -6,13 +6,6 @@ import type {
   RequirementOut,
 } from '../api/client';
 
-/**
- * agents/dispatch.py:28 returns exactly "regelbasiert" when no LLM is
- * configured, and "LLM (<model>)" otherwise. It is a free-form German display
- * string, not a union — so the label is stored as-is and the boolean derived.
- */
-const RULE_BASED_LABEL = 'regelbasiert';
-
 interface SessionState {
   backendLabel: string | null;
   isLlmActive: boolean;
@@ -25,7 +18,7 @@ interface SessionState {
   selectedCandidateId: string | null;
   error: string | null;
 
-  setBackendLabel: (label: string) => void;
+  setBackend: (label: string, isLlm: boolean) => void;
   setJobText: (text: string) => void;
   setRequirements: (requirements: RequirementOut[]) => void;
   addCandidate: (candidate: CandidateOut) => void;
@@ -60,8 +53,10 @@ const initial = {
 export const useSessionStore = create<SessionState>((set) => ({
   ...initial,
 
-  setBackendLabel: (label) =>
-    set({ backendLabel: label, isLlmActive: label !== RULE_BASED_LABEL }),
+  // `isLlmActive` comes from the server as its own boolean rather than being
+  // inferred from `backendLabel`: the label is display text and is translated,
+  // so comparing it against a known string would break on a language switch.
+  setBackend: (backendLabel, isLlmActive) => set({ backendLabel, isLlmActive }),
   setJobText: (jobText) => set({ jobText }),
   setRequirements: (requirements) => set({ requirements }),
   addCandidate: (candidate) => set((s) => ({ candidates: [...s.candidates, candidate] })),

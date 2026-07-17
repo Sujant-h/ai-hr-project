@@ -19,7 +19,7 @@ def test_requirements_are_extracted_from_a_job_ad(client):
     body = response.json()
     labels = [r["label"] for r in body["requirements"]]
     assert "Python" in labels
-    assert body["backend"] == "regelbasiert"
+    assert body["backend"] == "rule-based"
 
 
 def test_the_response_carries_its_own_audit_trail(client):
@@ -27,7 +27,7 @@ def test_the_response_carries_its_own_audit_trail(client):
     because there is nowhere on the server to keep it."""
     response = client.post("/api/job-profile", json={"text": "Python erforderlich"})
     entries = response.json()["audit"]
-    assert any(e["agent"] == "Stellenprofil-Agent" for e in entries)
+    assert any(e["agent"] == "Job Profile Agent" for e in entries)
     assert all(e["timestamp"] for e in entries)
 
 

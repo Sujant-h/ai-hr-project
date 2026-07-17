@@ -89,7 +89,7 @@ export function UploadTab() {
             type="file"
             multiple
             accept={ACCEPT}
-            aria-label="Dateien auswählen"
+            aria-label={t('upload.chooseFilesAria')}
             disabled={isUploading}
             onChange={(e: ChangeEvent<HTMLInputElement>) => void handleFiles(e.target.files)}
             className="sr-only"
@@ -126,7 +126,7 @@ export function UploadTab() {
                   </div>
                   <button
                     onClick={() => removeCandidate(c.id)}
-                    aria-label={`${c.name} entfernen`}
+                    aria-label={t('upload.removeAria', { name: c.name })}
                     className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                   >
                     <X size={16} />

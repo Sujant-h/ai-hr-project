@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { apiClient, ApiError } from './client';
+import i18n from '../i18n/config';
 
 const fetchMock = vi.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
+  await i18n.changeLanguage('en');
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -25,7 +27,7 @@ function err(status: number, body: unknown) {
 
 describe('uploadCv', () => {
   it('posts multipart, because /api/cv reads Form fields and not JSON', async () => {
-    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'regelbasiert' }));
+    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'rule-based' }));
     const file = new File(['Skills: Python'], 'cv.txt', { type: 'text/plain' });
     await apiClient.uploadCv({ name: 'Lena', index: 0, file });
 
@@ -41,7 +43,7 @@ describe('uploadCv', () => {
   });
 
   it('never sets Content-Type, so the browser can set the multipart boundary', async () => {
-    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'regelbasiert' }));
+    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'rule-based' }));
     await apiClient.uploadCv({ name: 'L', index: 0, file: new File(['x'], 'cv.txt') });
 
     const headers = (fetchMock.mock.calls[0][1]?.headers ?? {}) as Record<string, string>;
@@ -49,7 +51,7 @@ describe('uploadCv', () => {
   });
 
   it('sends pasted text as a Form field', async () => {
-    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'regelbasiert' }));
+    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'rule-based' }));
     await apiClient.uploadCv({ name: 'Lena', index: 2, text: 'Skills: Python' });
 
     const body = fetchMock.mock.calls[0][1].body as FormData;
@@ -58,26 +60,54 @@ describe('uploadCv', () => {
     expect(body.has('file')).toBe(false);
   });
 
-  it('surfaces the German 413 message for an oversized upload', async () => {
-    fetchMock.mockReturnValue(err(413, { detail: 'Datei zu groß (max. 10 MB).' }));
+  it('surfaces the server 413 message for an oversized upload', async () => {
+    // The server already wrote this in the language we sent it, so the client
+    // passes it through untouched.
+    fetchMock.mockReturnValue(err(413, { detail: 'File too large (max. 10 MB).' }));
     await expect(
       apiClient.uploadCv({ name: 'X', index: 0, file: new File(['x'], 'big.txt') }),
-    ).rejects.toMatchObject({ status: 413, message: 'Datei zu groß (max. 10 MB).' });
+    ).rejects.toMatchObject({ status: 413, message: 'File too large (max. 10 MB).' });
   });
 });
 
 describe('analyze', () => {
   it('posts requirements and candidates, not job_text and cvs', async () => {
     fetchMock.mockReturnValue(ok({ analyses: [], audit: [] }));
-    await apiClient.analyze({ requirements: [], candidates: [], cached_backends: ['regelbasiert'] });
+    await apiClient.analyze({ requirements: [], candidates: [], cached_backends: ['rule-based'] });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/analysis');
     expect(JSON.parse(init.body as string)).toEqual({
       requirements: [],
       candidates: [],
-      cached_backends: ['regelbasiert'],
+      cached_backends: ['rule-based'],
+      lang: 'en',
     });
+  });
+});
+
+describe('language', () => {
+  it('sends the active language, so the agents write prose the recruiter can read', async () => {
+    fetchMock.mockReturnValue(ok({ analyses: [], audit: [] }));
+    await apiClient.analyze({ requirements: [], candidates: [], cached_backends: [] });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).lang).toBe('en');
+
+    await i18n.changeLanguage('de');
+    fetchMock.mockReturnValue(ok({ analyses: [], audit: [] }));
+    await apiClient.analyze({ requirements: [], candidates: [], cached_backends: [] });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).lang).toBe('de');
+  });
+
+  it('puts the language on the query string for GETs', async () => {
+    fetchMock.mockReturnValue(ok({ label: 'rule-based', is_llm: false }));
+    await apiClient.getBackend();
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/backend?lang=en');
+  });
+
+  it('sends the language as a Form field on the multipart upload', async () => {
+    fetchMock.mockReturnValue(ok({ candidate: {}, audit: [], backend: 'rule-based' }));
+    await apiClient.uploadCv({ name: 'Lena', index: 0, text: 'Skills: Python' });
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('lang')).toBe('en');
   });
 });
 
@@ -100,10 +130,15 @@ describe('errors', () => {
     expect((e as ApiError).status).toBe(429);
   });
 
-  it('translates a rate limit into German, because the raw slowapi text is English', async () => {
+  it('replaces the raw slowapi rate-limit text with our own, in the active language', async () => {
     fetchMock.mockReturnValue(err(429, { detail: 'Rate limit exceeded' }));
-    const e = (await apiClient.getBackend().catch((x: unknown) => x)) as ApiError;
-    expect(e.message).toMatch(/Zu viele Anfragen/);
+    const en = (await apiClient.getBackend().catch((x: unknown) => x)) as ApiError;
+    expect(en.message).toMatch(/Too many requests/);
+
+    await i18n.changeLanguage('de');
+    fetchMock.mockReturnValue(err(429, { detail: 'Rate limit exceeded' }));
+    const de = (await apiClient.getBackend().catch((x: unknown) => x)) as ApiError;
+    expect(de.message).toMatch(/Zu viele Anfragen/);
   });
 
   it('survives an error body that is not JSON', async () => {

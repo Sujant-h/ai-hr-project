@@ -7,7 +7,7 @@ import { apiClient } from '../../api/client';
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(apiClient, 'getBackend').mockResolvedValue({ label: 'regelbasiert' });
+  vi.spyOn(apiClient, 'getBackend').mockResolvedValue({ label: 'rule-based', is_llm: false });
 });
 
 function renderAt(path: string) {
@@ -32,7 +32,7 @@ describe('Workspace tabs', () => {
 
   it('falls back to the first tab when the query is missing or unknown', () => {
     renderAt('/workspace?tab=nonsense');
-    expect(screen.getByRole('tab', { name: /Stellenprofil/ })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: /Job Profile/ })).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -40,8 +40,8 @@ describe('Workspace tabs', () => {
 
   it('writes the active tab to the URL when the user switches', async () => {
     renderAt('/workspace');
-    await userEvent.click(screen.getByRole('tab', { name: /Bewerbungen/ }));
-    expect(screen.getByRole('tab', { name: /Bewerbungen/ })).toHaveAttribute(
+    await userEvent.click(screen.getByRole('tab', { name: /Applications/ }));
+    expect(screen.getByRole('tab', { name: /Applications/ })).toHaveAttribute(
       'aria-selected',
       'true',
     );

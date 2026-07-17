@@ -18,23 +18,38 @@ from typing import Optional
 import llm_agents
 from agents.dispatch import AgentRun, match_candidate, summarize_backends
 from agents.rules import informationsluecken_agent, rueckfragen_agent
+from i18n import (
+    AGENT_GAPS,
+    AGENT_MATCHING,
+    AGENT_QUESTIONS,
+    DEFAULT_LANG,
+    tr,
+)
 from models import AuditEntry, Candidate
 
 
-def audit_entry(agent: str, action: str, detail: str = "") -> AuditEntry:
-    """Build a timestamped processing record."""
+def audit_entry(agent_key: str, action: str, detail: str = "", lang: str = DEFAULT_LANG) -> AuditEntry:
+    """Build a timestamped processing record.
+
+    `agent_key` is an i18n key (i18n.AGENT_*), not a name: the audit log is read
+    by the recruiter, so the agent that produced an entry is named in their
+    language. `action` and `detail` arrive already translated — the caller knows
+    which parameters they interpolate.
+    """
     return AuditEntry(
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        agent=agent,
+        agent=tr(agent_key, lang),
         action=action,
         detail=detail,
     )
 
 
-def fallback_entries(agent: str, run: AgentRun) -> list[AuditEntry]:
+def fallback_entries(agent_key: str, run: AgentRun, lang: str = DEFAULT_LANG) -> list[AuditEntry]:
     """Record an LLM->rules fallback, if one happened. Empty list if not."""
     if run.fallback_reason:
-        return [audit_entry(agent, "LLM-Fehler — Fallback auf Regeln", run.fallback_reason)]
+        return [
+            audit_entry(agent_key, tr("audit.fallback.action", lang), run.fallback_reason, lang)
+        ]
     return []
 
 
@@ -88,14 +103,14 @@ class CandidateAnalysis:
     fallback_reason: Optional[str] = None
 
 
-def derive_gaps_and_questions(candidate: Candidate) -> None:
+def derive_gaps_and_questions(candidate: Candidate, lang: str = DEFAULT_LANG) -> None:
     """Run the two local-only agents over a candidate's matches, in place."""
-    candidate.gaps = informationsluecken_agent(candidate, candidate.matches)
-    candidate.questions = rueckfragen_agent(candidate, candidate.gaps)
+    candidate.gaps = informationsluecken_agent(candidate, candidate.matches, lang)
+    candidate.questions = rueckfragen_agent(candidate, candidate.gaps, lang)
 
 
 def analyze_candidates(
-    requirements: list, candidates: list
+    requirements: list, candidates: list, lang: str = DEFAULT_LANG
 ) -> tuple[list[CandidateAnalysis], list[AuditEntry]]:
     """Match every candidate given against every requirement, then derive gaps
     and follow-up questions.
@@ -107,39 +122,50 @@ def analyze_candidates(
 
     Nothing is stored here — that is what keeps the API stateless.
     """
-    runs = _run_parallel(lambda cand: match_candidate(cand, requirements), candidates)
+    runs = _run_parallel(lambda cand: match_candidate(cand, requirements, lang), candidates)
 
     entries: list[AuditEntry] = []
     analyses: list[CandidateAnalysis] = []
     for cand, run in zip(candidates, runs):
-        entries.extend(fallback_entries("Matching-Agent", run))
+        entries.extend(fallback_entries(AGENT_MATCHING, run, lang))
         cand.matches = run.result
-        derive_gaps_and_questions(cand)
+        derive_gaps_and_questions(cand, lang)
         analyses.append(CandidateAnalysis(cand, run.backend, run.fallback_reason))
 
     return analyses, entries
 
 
-def batch_summary_entries(requirements: list, backends: list) -> list[AuditEntry]:
+def batch_summary_entries(
+    requirements: list, backends: list, lang: str = DEFAULT_LANG
+) -> list[AuditEntry]:
     """Summarise a completed analysis run for the audit trail.
 
     `backends` must cover EVERY candidate the user sees, including those served
     from cache — the caller is the only party holding cached and fresh results
-    together. Passing only the freshly computed ones would log "0 Kandidat(en)
-    geprüft" on a cached re-run, and the audit log is this app's transparency
+    together. Passing only the freshly computed ones would log "0 candidate(s)
+    checked" on a cached re-run, and the audit log is this app's transparency
     record: it has to state what actually produced each displayed result.
     """
     return [
         audit_entry(
-            "Matching-Agent",
-            "Anforderungsabgleich durchgeführt",
-            f"{len(backends)} Kandidat(en) gegen {len(requirements)} "
-            f"Anforderung(en) geprüft (Backend: {summarize_backends(backends)}).",
+            AGENT_MATCHING,
+            tr("audit.matching.action", lang),
+            tr(
+                "audit.matching.detail",
+                lang,
+                candidates=len(backends),
+                requirements=len(requirements),
+                backends=summarize_backends(backends, lang),
+            ),
+            lang,
         ),
         audit_entry(
-            "Informationslücken-Agent", "Lücken analysiert", "Fehlende Angaben pro Kandidat ermittelt."
+            AGENT_GAPS, tr("audit.gaps.action", lang), tr("audit.gaps.detail", lang), lang
         ),
         audit_entry(
-            "Rückfragen-Agent", "Rückfragen generiert", "Höfliche Rückfragen je Informationslücke erstellt."
+            AGENT_QUESTIONS,
+            tr("audit.questions.action", lang),
+            tr("audit.questions.detail", lang),
+            lang,
         ),
     ]

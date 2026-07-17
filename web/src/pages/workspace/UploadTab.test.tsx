@@ -17,7 +17,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
     skills: [],
     years: null,
     education: 0,
-    education_label: 'unbekannt',
+    education_label: 'unknown',
     languages: [],
     email: null,
     matches: [],
@@ -36,12 +36,12 @@ describe('UploadTab', () => {
   it('exposes a keyboard-reachable file input', () => {
     render(<UploadTab />);
     // sr-only keeps it reachable; the old display:none did not.
-    expect(screen.getByLabelText(/Dateien auswählen/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Choose files/i)).toBeInTheDocument();
   });
 
   it('accepts PDF, because the backend reads PDFs', () => {
     render(<UploadTab />);
-    const input = screen.getByLabelText(/Dateien auswählen/i);
+    const input = screen.getByLabelText(/Choose files/i);
     expect(input.getAttribute('accept')).toContain('.pdf');
   });
 
@@ -49,7 +49,7 @@ describe('UploadTab', () => {
     const spy = vi.spyOn(apiClient, 'uploadCv').mockResolvedValue({
       candidate: candidate(),
       audit: [],
-      backend: 'regelbasiert',
+      backend: 'rule-based',
     });
     render(<UploadTab />);
 
@@ -72,8 +72,8 @@ describe('UploadTab', () => {
   it('says why analysis is blocked when no profile has been parsed', () => {
     useSessionStore.getState().addCandidate(candidate());
     render(<UploadTab />);
-    expect(screen.getByRole('button', { name: /Gesamtanalyse starten/ })).toBeDisabled();
-    expect(screen.getByText(/Stellenprofil/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start Full Analysis/ })).toBeDisabled();
+    expect(screen.getByText(/job profile/i)).toBeInTheDocument();
   });
 
   it('enables analysis once requirements exist', () => {
@@ -82,7 +82,7 @@ describe('UploadTab', () => {
       { id: 'r0', label: 'Python', kind: 'skill', value: 'Python', importance: 'muss' },
     ]);
     render(<UploadTab />);
-    expect(screen.getByRole('button', { name: /Gesamtanalyse starten/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Start Full Analysis/ })).toBeEnabled();
   });
 
   it('loads demo data', async () => {
@@ -91,7 +91,7 @@ describe('UploadTab', () => {
       cvs: [],
     });
     render(<UploadTab />);
-    await userEvent.click(screen.getByRole('button', { name: /Demo-Daten laden/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load Demo Data/ }));
     expect(spy).toHaveBeenCalledOnce();
   });
 });

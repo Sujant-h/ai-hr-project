@@ -1,4 +1,30 @@
 {
+  "language": {
+    "en": "English",
+    "de": "Deutsch",
+    "switchTo": "Switch to {{language}}"
+  },
+  "errors": {
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "unauthorized": "Invalid or missing access code (password).",
+    "unknown": "Unknown error.",
+    "dismiss": "Dismiss error message"
+  },
+  "access": {
+    "verifying": "Checking access...",
+    "deniedTitle": "Access Denied",
+    "deniedDesc": "Please use the QR code or the dedicated link from the presentation to access the app."
+  },
+  "status": {
+    "erfuellt": "Met",
+    "teilweise": "Partial",
+    "offen": "Open",
+    "nicht_erfuellt": "Not met"
+  },
+  "importance": {
+    "muss": "Must",
+    "kann": "Nice to have"
+  },
   "nav": {
     "problem": "The Problem",
     "solution": "The Solution",
@@ -67,7 +93,9 @@
     "plan3F2": "Custom Models / API",
     "plan3F3": "Audit Export",
     "ctaTitle": "Ready for your first screening?",
-    "ctaDesc": "Start in seconds \u2014 no setup required."
+    "ctaDesc": "Start in seconds \u2014 no setup required.",
+    "solutionImgAlt": "Illustration of the agent team",
+    "resultsImgAlt": "Structured candidate data and qualification checklist"
   },
   "upload": {
     "title": "Upload Applications",
@@ -82,7 +110,44 @@
     "remove": "remove",
     "analyzeFirst": "Analyze a job profile under \u2460 first \u2014 without requirements there's nothing to match.",
     "analyzing": "Analyzing...",
-    "startAnalysis": "Start Full Analysis"
+    "startAnalysis": "Start Full Analysis",
+    "chooseFilesAria": "Choose files",
+    "removeAria": "Remove {{name}}"
+  },
+  "jobProfile": {
+    "title": "Define Job Profile",
+    "desc": "Paste the requirements for the role and let the AI structure them.",
+    "placeholder": "Paste the job description here...",
+    "ariaLabel": "Job description",
+    "analyzing": "Analyzing...",
+    "analyze": "\u2728 Analyze Profile",
+    "extractedReqs": "Extracted Requirements"
+  },
+  "gaps": {
+    "noAnalysis": "No analysis performed yet.",
+    "title": "Information Gaps",
+    "desc": "Details missing from the CVs that are relevant to matching.",
+    "none": "\ud83c\udf89 No information gaps found!"
+  },
+  "questions": {
+    "noAnalysis": "No analysis performed yet.",
+    "title": "Clarifying Questions & Emails",
+    "desc": "Suggested questions and drafts. Nothing is sent automatically.",
+    "suggested": "Suggested Questions",
+    "noOpen": "No open questions.",
+    "drafting": "Creating draft...",
+    "createDraft": "\u2709\ufe0f Create Draft",
+    "draftPreview": "Draft (Preview)",
+    "to": "To:",
+    "subject": "Subject:",
+    "openInMail": "\ud83d\udce7 Open in Email Client",
+    "draftFailed": "Draft failed."
+  },
+  "audit": {
+    "title": "Audit Log",
+    "desc": "Every processing step is thoroughly documented.",
+    "clear": "\ud83d\uddd1\ufe0f Clear Audit Log",
+    "empty": "No activity logged yet."
   },
   "candidates": {
     "working": "\u23f3 The agents are working in the background...",
@@ -117,6 +182,7 @@
     "title": "Your Screening Workspace",
     "desc": "Define the job profile, analyze applications, and verify results transparently \u2014 the final decision is yours.",
     "noLlm": "No LLM active:",
-    "sandbox": "The agents are running in rule-based sandbox mode."
+    "sandbox": "The agents are running in rule-based sandbox mode.",
+    "tabsAria": "Screening steps"
   }
 }

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
+import { currentLanguage } from '@/i18n/config';
 import LOGO_URL from '@/assets/logo.webp';
 
 export const NavBar: React.FC = () => {
@@ -10,7 +11,13 @@ export const NavBar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/';
-  
+
+  // Read through currentLanguage rather than i18n.language directly: the raw
+  // value can be a region tag ("en-GB"), which would render as a nonsense
+  // button label and never equal 'en' when picking the other language.
+  const language = currentLanguage();
+  const nextLanguage = language === 'en' ? 'de' : 'en';
+
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -48,13 +55,15 @@ export const NavBar: React.FC = () => {
 
         {/* CTA */}
         <div className="flex-1 flex justify-end items-center gap-1 sm:gap-2 shrink-0">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'de' : 'en')}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void i18n.changeLanguage(nextLanguage)}
+            aria-label={t('language.switchTo', { language: t(`language.${nextLanguage}`) })}
+            title={t('language.switchTo', { language: t(`language.${nextLanguage}`) })}
             className="font-bold text-slate-600 hover:bg-slate-100 rounded-xl shrink-0 px-2 sm:px-3"
           >
-            {i18n.language.toUpperCase()}
+            {language.toUpperCase()}
           </Button>
           {isHome ? (
             <Button onClick={() => navigate('/workspace')} className="rounded-xl shadow-md bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-500 hover:to-blue-400 text-white font-semibold border-0 shrink-0 text-xs sm:text-sm px-3 sm:px-4">

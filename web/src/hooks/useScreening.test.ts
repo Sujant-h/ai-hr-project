@@ -25,7 +25,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
     skills: ['Python'],
     years: null,
     education: 0,
-    education_label: 'unbekannt',
+    education_label: 'unknown',
     languages: [],
     email: null,
     matches: [],
@@ -45,7 +45,7 @@ describe('parseJob', () => {
     vi.spyOn(apiClient, 'parseJobProfile').mockResolvedValue({
       requirements: [req],
       audit: [{ timestamp: '1', agent: 'Stellenprofil-Agent', action: 'a', detail: 'd' }],
-      backend: 'regelbasiert',
+      backend: 'rule-based',
     });
     useSessionStore.getState().setJobText('Wir suchen Python.');
 
@@ -79,7 +79,7 @@ describe('uploadFiles', () => {
     const spy = vi.spyOn(apiClient, 'uploadCv').mockResolvedValue({
       candidate: candidate(),
       audit: [],
-      backend: 'regelbasiert',
+      backend: 'rule-based',
     });
     const { result } = renderHook(() => useScreening());
     await act(() => result.current.uploadFiles([new File(['x'], 'cv.txt')]));
@@ -92,7 +92,7 @@ describe('uploadFiles', () => {
     const spy = vi.spyOn(apiClient, 'uploadCv').mockImplementation(async ({ index }) => ({
       candidate: candidate({ id: `cand_${index}` }),
       audit: [],
-      backend: 'regelbasiert',
+      backend: 'rule-based',
     }));
     useSessionStore.getState().addCandidate(candidate({ id: 'cand_0' }));
 
@@ -104,7 +104,7 @@ describe('uploadFiles', () => {
 
   it('reports a rejected file without discarding the ones that worked', async () => {
     vi.spyOn(apiClient, 'uploadCv')
-      .mockResolvedValueOnce({ candidate: candidate({ id: 'cand_0' }), audit: [], backend: 'regelbasiert' })
+      .mockResolvedValueOnce({ candidate: candidate({ id: 'cand_0' }), audit: [], backend: 'rule-based' })
       .mockRejectedValueOnce(new ApiError(413, 'Datei zu groß (max. 10 MB).'));
 
     const { result } = renderHook(() => useScreening());
@@ -133,8 +133,8 @@ describe('runAnalysis', () => {
     // First run populates the cache for both candidates.
     spy.mockResolvedValueOnce({
       analyses: [
-        { candidate: cached, backend: 'regelbasiert', fallback_reason: null },
-        { candidate: fresh, backend: 'regelbasiert', fallback_reason: null },
+        { candidate: cached, backend: 'rule-based', fallback_reason: null },
+        { candidate: fresh, backend: 'rule-based', fallback_reason: null },
       ],
       audit: [],
     });
@@ -144,7 +144,7 @@ describe('runAnalysis', () => {
     // Second run sends nothing and reports both as cached.
     await act(() => result.current.runAnalysis());
     expect(spy.mock.calls[1][0].candidates).toHaveLength(0);
-    expect(spy.mock.calls[1][0].cached_backends).toEqual(['regelbasiert', 'regelbasiert']);
+    expect(spy.mock.calls[1][0].cached_backends).toEqual(['rule-based', 'rule-based']);
     expect(useSessionStore.getState().analyses).toHaveLength(2);
   });
 
@@ -163,8 +163,8 @@ describe('runAnalysis', () => {
     // Return them out of order; the hook must restore upload order.
     spy.mockResolvedValueOnce({
       analyses: [
-        { candidate: second, backend: 'regelbasiert', fallback_reason: null },
-        { candidate: first, backend: 'regelbasiert', fallback_reason: null },
+        { candidate: second, backend: 'rule-based', fallback_reason: null },
+        { candidate: first, backend: 'rule-based', fallback_reason: null },
       ],
       audit: [],
     });
@@ -176,7 +176,7 @@ describe('runAnalysis', () => {
   it('re-sends a candidate whose analysis fell back', async () => {
     const c = candidate();
     const spy = vi.spyOn(apiClient, 'analyze').mockResolvedValue({
-      analyses: [{ candidate: c, backend: 'regelbasiert', fallback_reason: 'timeout' }],
+      analyses: [{ candidate: c, backend: 'rule-based', fallback_reason: 'timeout' }],
       audit: [],
     });
     const store = useSessionStore.getState();
@@ -216,9 +216,13 @@ describe('runAnalysis', () => {
 
 describe('fetchBackendLabel', () => {
   it('stores the label', async () => {
-    vi.spyOn(apiClient, 'getBackend').mockResolvedValue({ label: 'LLM (gpt-4o-mini)' });
+    vi.spyOn(apiClient, 'getBackend').mockResolvedValue({
+      label: 'LLM (gpt-4o-mini)',
+      is_llm: true,
+    });
     const { result } = renderHook(() => useScreening());
     await act(() => result.current.fetchBackendLabel());
+    expect(useSessionStore.getState().backendLabel).toBe('LLM (gpt-4o-mini)');
     expect(useSessionStore.getState().isLlmActive).toBe(true);
   });
 

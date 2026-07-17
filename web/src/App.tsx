@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { NavBar } from './components/NavBar';
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })));
@@ -8,6 +9,7 @@ const Workspace = lazy(() =>
 );
 
 function App() {
+  const { t } = useTranslation();
   const [hasAccess, setHasAccess] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -49,7 +51,7 @@ function App() {
   if (isVerifying) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="text-slate-500 font-medium animate-pulse">Zugang wird geprüft...</div>
+        <div className="text-slate-500 font-medium animate-pulse">{t('access.verifying')}</div>
       </div>
     );
   }
@@ -57,10 +59,8 @@ function App() {
   if (!hasAccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-        <h1 className="text-3xl font-black text-slate-900 mb-4">Zugriff verweigert</h1>
-        <p className="text-lg text-slate-600 mb-8 max-w-md">
-          Bitte nutzen Sie den QR-Code oder den speziellen Link aus der Präsentation, um auf die App zuzugreifen.
-        </p>
+        <h1 className="text-3xl font-black text-slate-900 mb-4">{t('access.deniedTitle')}</h1>
+        <p className="text-lg text-slate-600 mb-8 max-w-md">{t('access.deniedDesc')}</p>
       </div>
     );
   }

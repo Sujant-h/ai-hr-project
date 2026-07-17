@@ -15,6 +15,7 @@ function match(over: Partial<MatchResultOut> = {}): MatchResultOut {
     importance: 'muss',
     status: 'erfuellt',
     note: '',
+    value: 'Python',
     ...over,
   };
 }
@@ -28,7 +29,7 @@ function candidate(over: Partial<CandidateOut> = {}): CandidateOut {
     skills: [],
     years: null,
     education: 0,
-    education_label: 'unbekannt',
+    education_label: 'unknown',
     languages: [],
     email: null,
     matches: [],
@@ -43,12 +44,12 @@ beforeEach(() => useSessionStore.getState().reset());
 describe('CandidatesTab', () => {
   it('tells the recruiter to run an analysis when there is none', () => {
     render(<CandidatesTab />);
-    expect(screen.getByText(/Noch keine Analyse/)).toBeInTheDocument();
+    expect(screen.getByText(/No analysis performed yet/)).toBeInTheDocument();
   });
 
   it('shows the candidate name, not a filename', () => {
     useSessionStore.getState().setAnalyses([
-      { candidate: candidate({ name: 'Lena Hoffmann' }), backend: 'regelbasiert', fallback_reason: null },
+      { candidate: candidate({ name: 'Lena Hoffmann' }), backend: 'rule-based', fallback_reason: null },
     ]);
     render(<CandidatesTab />);
     expect(screen.getByText('Lena Hoffmann')).toBeInTheDocument();
@@ -64,7 +65,7 @@ describe('CandidatesTab', () => {
             match({ requirement_id: 'r2', status: 'nicht_erfuellt' }),
           ],
         }),
-        backend: 'regelbasiert',
+        backend: 'rule-based',
         fallback_reason: null,
       },
     ]);
@@ -74,7 +75,7 @@ describe('CandidatesTab', () => {
 
   it('marks a fallback so a rule-based result is never mistaken for an LLM one', () => {
     useSessionStore.getState().setAnalyses([
-      { candidate: candidate(), backend: 'regelbasiert', fallback_reason: 'timeout' },
+      { candidate: candidate(), backend: 'rule-based', fallback_reason: 'timeout' },
     ]);
     render(<CandidatesTab />);
     expect(screen.getByText(/Fallback/)).toBeInTheDocument();

@@ -1,28 +1,30 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSessionStore } from '../store/session';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 
 export const AuditLog: React.FC = () => {
+  const { t } = useTranslation();
   const { auditLog, clearAuditLog } = useSessionStore();
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Audit Log</h2>
-          <p className="text-slate-600">Jeder Verarbeitungsschritt wird lückenlos dokumentiert.</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">{t('audit.title')}</h2>
+          <p className="text-slate-600">{t('audit.desc')}</p>
         </div>
         {auditLog.length > 0 && (
           <Button variant="outline" onClick={clearAuditLog} className="rounded-xl border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">
-            🗑️ Audit Log leeren
+            {t('audit.clear')}
           </Button>
         )}
       </div>
 
       {!auditLog || auditLog.length === 0 ? (
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-8 text-center text-indigo-800 font-medium">
-          Noch keine Aktivität protokolliert.
+          {t('audit.empty')}
         </div>
       ) : (
         <div className="flex flex-col gap-4">

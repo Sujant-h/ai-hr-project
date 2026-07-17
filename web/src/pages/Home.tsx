@@ -113,7 +113,7 @@ export const Home: React.FC = () => {
           <Reveal>
             <div id="loesung" className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
               <div className="order-2 md:order-1 rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
-                <img src={IMG_ORB} alt="Illustration des Agenten-Teams" width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
+                <img src={IMG_ORB} alt={t('home.solutionImgAlt')} width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
               </div>
               <div className="order-1 md:order-2">
                 <div className="text-sm font-extrabold tracking-widest text-indigo-700 uppercase mb-4">{t('home.solutionLabel')}</div>
@@ -182,7 +182,7 @@ export const Home: React.FC = () => {
                 </Button>
               </div>
               <div className="rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 bg-white p-2">
-                <img src={IMG_DATA} alt="Strukturierte Kandidatendaten und Qualifikationscheckliste" width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
+                <img src={IMG_DATA} alt={t('home.resultsImgAlt')} width={1376} height={768} loading="lazy" decoding="async" className="w-full h-auto rounded-2xl" />
               </div>
             </div>
           </Reveal>

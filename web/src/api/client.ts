@@ -1,3 +1,4 @@
+import i18n, { currentLanguage } from '../i18n/config';
 import type { components } from './types';
 
 const API_BASE = '/api';
@@ -42,11 +43,14 @@ async function toApiError(res: Response): Promise<ApiError> {
     // A non-JSON error body (a proxy 502, say) still has to become an ApiError.
   }
 
+  // These two are raised by middleware that never sees our `lang`, so their
+  // wording is replaced here rather than translated on the server: slowapi
+  // writes its own English message, and the 401 comes from the auth dependency
+  // before any payload is parsed.
   if (res.status === 429) {
-    // slowapi's own message is English; everything user-facing here is German.
-    message = 'Zu viele Anfragen. Bitte einen Moment warten und erneut versuchen.';
+    message = i18n.t('errors.rateLimited');
   } else if (res.status === 401) {
-    message = 'Ungültiger oder fehlender Zugangs-Code (Passwort).';
+    message = i18n.t('errors.unauthorized');
   }
 
   return new ApiError(res.status, message);
@@ -70,6 +74,12 @@ function getAuthHeaders(): Record<string, string> {
     headers['X-Access-Token'] = pwd;
   }
   return headers;
+}
+
+/** Append the active language to a GET endpoint's query string. */
+function withLang(endpoint: string): string {
+  const sep = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${sep}lang=${currentLanguage()}`;
 }
 
 async function getJson<T>(endpoint: string): Promise<T> {
@@ -104,18 +114,26 @@ async function postForm<T>(endpoint: string, form: FormData): Promise<T> {
   return res.json();
 }
 
+/**
+ * Every call carries the active language: the agents write prose the recruiter
+ * reads (match notes, gaps, follow-up questions, the audit trail), and it has to
+ * come back in the language they picked. It is read at call time rather than
+ * captured once, so a switch takes effect on the very next request.
+ */
 export const apiClient = {
-  getBackend: () => getJson<BackendOut>('/backend'),
+  getBackend: () => getJson<BackendOut>(withLang('/backend')),
 
-  getDemo: () => getJson<DemoOut>('/demo'),
+  getDemo: () => getJson<DemoOut>(withLang('/demo')),
 
-  parseJobProfile: (text: string) => postJson<JobProfileOut>('/job-profile', { text }),
+  parseJobProfile: (text: string) =>
+    postJson<JobProfileOut>('/job-profile', { text, lang: currentLanguage() }),
 
   /** POST /api/cv reads Form fields, not JSON (api/main.py:148). */
   uploadCv: (input: { name: string; index: number; file?: File; text?: string }) => {
     const form = new FormData();
     form.set('name', input.name);
     form.set('index', String(input.index));
+    form.set('lang', currentLanguage());
     if (input.file) form.set('file', input.file);
     else if (input.text !== undefined) form.set('text', input.text);
     return postForm<CvOut>('/cv', form);
@@ -125,8 +143,8 @@ export const apiClient = {
     requirements: RequirementOut[];
     candidates: CandidateOut[];
     cached_backends: string[];
-  }) => postJson<AnalysisOut>('/analysis', input),
+  }) => postJson<AnalysisOut>('/analysis', { ...input, lang: currentLanguage() }),
 
   draftEmail: (input: { candidate: CandidateOut; questions: string[] }) =>
-    postJson<EmailOut>('/email', input),
+    postJson<EmailOut>('/email', { ...input, lang: currentLanguage() }),
 };

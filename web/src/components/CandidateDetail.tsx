@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Card, CardContent } from './ui/card';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '../store/session';
-import { STATUS_CLASS, STATUS_LABEL, metCount } from '../lib/status';
+import { STATUS_CLASS, STATUS_LABEL_KEY, metCount } from '../lib/status';
 
 export function CandidateDetail() {
   const { t } = useTranslation();
@@ -113,7 +113,7 @@ export function CandidateDetail() {
                             STATUS_CLASS[m.status],
                           )}
                         >
-                          {STATUS_LABEL[m.status]}
+                          {t(STATUS_LABEL_KEY[m.status])}
                         </Badge>
                       </CardContent>
                     </Card>

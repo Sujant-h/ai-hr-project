@@ -21,47 +21,13 @@ from functools import lru_cache
 from typing import Optional
 
 import llm_agents
-from models import EDU_LABELS, EDU_LEVELS, Candidate, Gap, MatchResult, Requirement
+from i18n import DEFAULT_LANG, edu_label, language_display, tr
+from models import EDU_LEVELS, Candidate, Gap, MatchResult, Requirement
 
-# =============================================================================
-#  KNOWLEDGE BASE (deterministic demo extraction vocabulary)
-# =============================================================================
-
-SKILL_VOCAB = {
-    "Python": ["python"],
-    "Java": ["java"],
-    "JavaScript": ["javascript", "js", "node"],
-    "TypeScript": ["typescript", "ts"],
-    "React": ["react"],
-    "SQL": ["sql", "postgres", "mysql"],
-    "AWS": ["aws", "amazon web services"],
-    "Azure": ["azure"],
-    "Docker": ["docker"],
-    "Kubernetes": ["kubernetes", "k8s"],
-    "Machine Learning": ["machine learning", "ml", "tensorflow", "pytorch"],
-    "Excel": ["excel"],
-    "SAP": ["sap"],
-    "Salesforce": ["salesforce"],
-    "Projektmanagement": ["projektmanagement", "project management", "scrum", "agile", "kanban"],
-    "Kommunikation": ["kommunikation", "communication"],
-    "Vertrieb": ["vertrieb", "sales"],
-    "Marketing": ["marketing", "seo", "sea"],
-    "Buchhaltung": ["buchhaltung", "accounting", "rechnungswesen"],
-    "IT-Sicherheit": ["it-sicherheit", "it security", "cyber security", "it-forensik", "penetration testing"],
-    "Informatik": ["informatik", "computer science"],
-    "Wirtschaftsinformatik": ["wirtschaftsinformatik"],
-    "Naturwissenschaften": ["naturwissenschaften"],
-    "Lösungsorientiert": ["lösungsorientiert"],
-}
-
-LANGUAGE_VOCAB = {
-    "Deutsch": ["deutsch", "german"],
-    "Englisch": ["englisch", "english"],
-    "Französisch": ["französisch", "franzosisch", "french"],
-    "Spanisch": ["spanisch", "spanish"],
-    "Italienisch": ["italienisch", "italian"],
-}
-
+# The extraction vocabulary lives in vocabulary.py because the LLM backend needs
+# it too, to canonicalize what the model gives back. Re-exported here: this
+# module is where it has always been read from.
+from vocabulary import LANGUAGE_VOCAB, SKILL_VOCAB
 
 
 # =============================================================================
@@ -151,12 +117,16 @@ def _mentions_education(text: str, key: str) -> bool:
     return False
 
 
-def _detect_education(text: str) -> tuple:
-    """Return (level:int, label:str) for the highest education found.
+def _detect_education(text: str) -> int:
+    """Return the level of the highest education found, 0 for none.
 
     Matching is whole-word: a plain substring test credits "Diplomarbeit" as a
     Diplom and "Masterarbeit" as a Master, promoting candidates to degrees they
     never claimed.
+
+    Only the level is returned. The name of that level is display text and
+    depends on the recruiter's language, so it is the caller's business — see
+    i18n.edu_label.
     """
     best = 0
     for key, level in EDU_LEVELS.items():
@@ -164,7 +134,7 @@ def _detect_education(text: str) -> tuple:
             continue
         if _mentions_education(text, key):
             best = level
-    return best, EDU_LABELS.get(best, "unbekannt")
+    return best
 
 
 def _detect_email(text: str) -> Optional[str]:
@@ -174,14 +144,28 @@ def _detect_email(text: str) -> Optional[str]:
 
 # --- Agent 1: Stellenprofil-Agent -------------------------------------------
 
-def stellenprofil_agent(text: str) -> list:
-    """Extract measurable requirements from a free-text job profile."""
+def stellenprofil_agent(text: str, lang: str = DEFAULT_LANG) -> list:
+    """Extract measurable requirements from a free-text job profile.
+
+    `lang` governs the requirement labels only. What is extracted never depends
+    on it: the vocabulary is matched against the document, not against the
+    recruiter's UI language.
+    """
     requirements: list = []
 
+    # Markers that demote a requirement to a nice-to-have. Multilingual because
+    # they are matched against the job ad, whose language is the author's — an
+    # English ad saying "desirable" must not be read as mandatory just because
+    # the recruiter's UI happens to be German, or vice versa.
+    nice_markers = [
+        "wünschenswert", "wunschenswert", "von vorteil", "idealerweise", "kann", "optional",
+        "nice to have", "nice-to-have", "desirable", "preferred", "a plus", "an advantage",
+        "advantageous", "ideally", "bonus",
+    ]
+
     def importance_for(snippet: str) -> str:
-        nice = ["wünschenswert", "wunschenswert", "von vorteil", "nice to have", "kann", "optional"]
         low_snippet = snippet.lower()
-        return "kann" if any(n in low_snippet for n in nice) else "muss"
+        return "kann" if any(n in low_snippet for n in nice_markers) else "muss"
 
     # Skills — importance is judged on the line the skill was actually matched
     # on, which is not necessarily a line containing its canonical name.
@@ -202,7 +186,7 @@ def stellenprofil_agent(text: str) -> list:
         requirements.append(
             Requirement(
                 id="exp_years",
-                label=f"{years}+ Jahre Berufserfahrung",
+                label=tr("req.experience", lang, years=years),
                 kind="experience",
                 value=years,
                 importance="muss",
@@ -210,12 +194,12 @@ def stellenprofil_agent(text: str) -> list:
         )
 
     # Education
-    edu_level, edu_label = _detect_education(text)
+    edu_level = _detect_education(text)
     if edu_level > 0:
         requirements.append(
             Requirement(
                 id="education",
-                label=f"Bildungsabschluss: {edu_label}",
+                label=tr("req.education", lang, label=edu_label(edu_level, lang)),
                 kind="education",
                 value=edu_level,
                 importance="muss",
@@ -223,13 +207,13 @@ def stellenprofil_agent(text: str) -> list:
         )
 
     # Languages
-    for lang in _find_terms(text, LANGUAGE_VOCAB):
+    for language in _find_terms(text, LANGUAGE_VOCAB):
         requirements.append(
             Requirement(
-                id=f"lang_{lang.lower()}",
-                label=f"Sprache: {lang}",
+                id=f"lang_{language.lower()}",
+                label=tr("req.language", lang, language=language_display(language, lang)),
                 kind="language",
-                value=lang,
+                value=language,
                 importance="muss",
             )
         )
@@ -239,7 +223,7 @@ def stellenprofil_agent(text: str) -> list:
 
 # --- Agent 2: CV-Agent ------------------------------------------------------
 
-def cv_agent(name: str, source: str, text: str, idx: int) -> Candidate:
+def cv_agent(name: str, source: str, text: str, idx: int, lang: str = DEFAULT_LANG) -> Candidate:
     """Extract structured candidate information from raw CV text."""
     # Data minimization (Art. 5 GDPR / AGG): strip demographic lines BEFORE they
     # are stored. `raw_text` is later reused as the CV for the matching call, so
@@ -250,7 +234,7 @@ def cv_agent(name: str, source: str, text: str, idx: int) -> Candidate:
     skills = _find_terms(text, SKILL_VOCAB)
     languages = _find_terms(text, LANGUAGE_VOCAB)
     years = _detect_years(text)
-    edu_level, edu_label = _detect_education(text)
+    edu_level = _detect_education(text)
     email = _detect_email(text)
 
     # Try to find a human-readable name from a "Name:" line, else use given name.
@@ -269,7 +253,7 @@ def cv_agent(name: str, source: str, text: str, idx: int) -> Candidate:
         skills=skills,
         years=years,
         education=edu_level,
-        education_label=edu_label if edu_level > 0 else "unbekannt",
+        education_label=edu_label(edu_level, lang) if edu_level > 0 else tr("edu.unknown", lang),
         languages=languages,
         email=email,
     )
@@ -277,7 +261,7 @@ def cv_agent(name: str, source: str, text: str, idx: int) -> Candidate:
 
 # --- Agent 3: Matching-Agent ------------------------------------------------
 
-def matching_agent(candidate: Candidate, requirements: list) -> list:
+def matching_agent(candidate: Candidate, requirements: list, lang: str = DEFAULT_LANG) -> list:
     """Compare each requirement against the candidate's data (no ranking)."""
     results: list = []
     for req in requirements:
@@ -286,31 +270,37 @@ def matching_agent(candidate: Candidate, requirements: list) -> list:
 
         if req.kind == "skill":
             if req.value in candidate.skills:
-                status, note = "erfuellt", "Im Lebenslauf erwähnt."
+                status, note = "erfuellt", tr("note.skill.met", lang)
             else:
-                status, note = "offen", "Nicht im Lebenslauf erwähnt."
+                status, note = "offen", tr("note.skill.open", lang)
 
         elif req.kind == "experience":
             if candidate.years is None:
-                status, note = "offen", "Keine Angabe zur Berufserfahrung gefunden."
+                status, note = "offen", tr("note.experience.missing", lang)
             elif candidate.years >= int(req.value):
-                status, note = "erfuellt", f"{candidate.years} Jahre angegeben."
+                status, note = "erfuellt", tr("note.experience.met", lang, years=candidate.years)
             else:
-                status, note = "teilweise", f"Nur {candidate.years} von {req.value} Jahren angegeben."
+                status, note = "teilweise", tr(
+                    "note.experience.partial", lang, years=candidate.years, required=req.value
+                )
 
         elif req.kind == "education":
+            # The level, not the stored label: `education_label` was written in
+            # whatever language the CV was uploaded under, and this note has to
+            # be in the language of THIS request.
+            level = edu_label(candidate.education, lang)
             if candidate.education == 0:
-                status, note = "offen", "Kein Bildungsabschluss erkennbar."
+                status, note = "offen", tr("note.education.missing", lang)
             elif candidate.education >= int(req.value):
-                status, note = "erfuellt", f"{candidate.education_label} vorhanden."
+                status, note = "erfuellt", tr("note.education.met", lang, label=level)
             else:
-                status, note = "teilweise", f"{candidate.education_label} (gefordert: höher)."
+                status, note = "teilweise", tr("note.education.partial", lang, label=level)
 
         elif req.kind == "language":
             if req.value in candidate.languages:
-                status, note = "erfuellt", "Sprache genannt."
+                status, note = "erfuellt", tr("note.language.met", lang)
             else:
-                status, note = "offen", "Sprache nicht genannt."
+                status, note = "offen", tr("note.language.open", lang)
 
         results.append(
             MatchResult(
@@ -320,13 +310,14 @@ def matching_agent(candidate: Candidate, requirements: list) -> list:
                 importance=req.importance,
                 status=status,
                 note=note,
+                value=req.value,
             )
         )
     return results
 
 # --- Agent 4: Informationslücken-Agent --------------------------------------
 
-def informationsluecken_agent(candidate: Candidate, matches: list) -> list:
+def informationsluecken_agent(candidate: Candidate, matches: list, lang: str = DEFAULT_LANG) -> list:
     """Identify missing or unclear information that blocks a clean assessment.
 
     Gaps on nice-to-have requirements are kept but marked "kann": they are worth
@@ -337,12 +328,32 @@ def informationsluecken_agent(candidate: Candidate, matches: list) -> list:
     gaps: list = []
     for m in matches:
         if m.status in ("offen", "teilweise"):
-            gaps.append(Gap(requirement_label=m.label, description=m.note, importance=m.importance))
+            gaps.append(
+                Gap(
+                    requirement_label=m.label,
+                    description=m.note,
+                    importance=m.importance,
+                    kind=m.kind,
+                    value=m.value,
+                )
+            )
 
     if not candidate.email:
-        gaps.append(Gap(requirement_label="Kontaktdaten", description="Keine E-Mail-Adresse im Lebenslauf gefunden."))
+        gaps.append(
+            Gap(
+                requirement_label=tr("gap.contact.label", lang),
+                description=tr("gap.contact.description", lang),
+                kind="contact",
+            )
+        )
     if candidate.years is None:
-        gaps.append(Gap(requirement_label="Berufserfahrung", description="Dauer der Berufserfahrung unklar."))
+        gaps.append(
+            Gap(
+                requirement_label=tr("gap.experience.label", lang),
+                description=tr("gap.experience.description", lang),
+                kind="experience_years",
+            )
+        )
 
     gaps.sort(key=lambda g: g.importance != "muss")  # stable: muss first
     return gaps
@@ -350,8 +361,14 @@ def informationsluecken_agent(candidate: Candidate, matches: list) -> list:
 
 # --- Agent 5: Rückfragen-Agent ----------------------------------------------
 
-def rueckfragen_agent(candidate: Candidate, gaps: list) -> list:
-    """Generate polite, candidate-facing follow-up questions for each gap."""
+def rueckfragen_agent(candidate: Candidate, gaps: list, lang: str = DEFAULT_LANG) -> list:
+    """Generate polite, candidate-facing follow-up questions for each gap.
+
+    Which question a gap gets is decided by `gap.kind` — a stable code — not by
+    reading its label. The label is prose in the recruiter's language, so
+    matching on it would silently produce the generic skill question for every
+    gap the moment the UI was switched to another language.
+    """
     questions: list = []
     seen = set()
     for gap in gaps:
@@ -360,48 +377,44 @@ def rueckfragen_agent(candidate: Candidate, gaps: list) -> list:
             continue
         seen.add(label)
 
-        if label == "Kontaktdaten":
-            q = "Könnten Sie uns bitte eine aktuelle E-Mail-Adresse für die Kontaktaufnahme nennen?"
-        elif label == "Berufserfahrung":
-            q = "Wie viele Jahre einschlägige Berufserfahrung bringen Sie insgesamt mit?"
-        elif label.startswith("Sprache:"):
-            lang = label.replace("Sprache:", "").strip()
-            q = f"Auf welchem Niveau beherrschen Sie {lang}? (z. B. fließend, verhandlungssicher, Muttersprache)"
-        elif label.startswith("Bildungsabschluss"):
-            q = "Welchen höchsten Bildungsabschluss haben Sie und in welchem Fachbereich?"
-        elif "Jahre Berufserfahrung" in label:
-            q = "Könnten Sie Ihre relevante Berufserfahrung für diese Position kurz beschreiben?"
+        if gap.kind == "contact":
+            q = tr("question.contact", lang)
+        elif gap.kind == "experience_years":
+            q = tr("question.experience_years", lang)
+        elif gap.kind == "language":
+            q = tr("question.language", lang, language=language_display(str(gap.value), lang))
+        elif gap.kind == "education":
+            q = tr("question.education", lang)
+        elif gap.kind == "experience":
+            q = tr("question.experience", lang)
         else:
-            q = f"Könnten Sie Ihre Erfahrung im Bereich „{label}“ näher erläutern?"
+            q = tr("question.skill", lang, label=label)
 
         questions.append(q)
     return questions
 
 
-def generate_email(candidate: Candidate, selected_questions: list) -> tuple:
+def generate_email(candidate: Candidate, selected_questions: list, lang: str = DEFAULT_LANG) -> tuple:
     """Compose a polite follow-up e-mail draft from the selected questions.
 
     Deterministic, template-based generation (no API key required). The draft
     is NEVER sent automatically — it is only prepared for human review.
     """
-    to = candidate.email or "bewerber@example.com"
-    subject = "Rückfragen zu Ihrer Bewerbung"
+    to = candidate.email or tr("email.fallback_address", lang)
+    subject = tr("email.subject", lang)
     lines = [
-        f"Sehr geehrte/r {candidate.name},",
+        tr("email.greeting", lang, name=candidate.name),
         "",
-        "vielen Dank für Ihre Bewerbung und Ihr Interesse an der ausgeschriebenen "
-        "Position. Um Ihre Unterlagen vollständig und fair bewerten zu können, "
-        "hätten wir noch einige kurze Rückfragen an Sie:",
+        tr("email.intro", lang),
         "",
     ]
     for i, q in enumerate(selected_questions, 1):
         lines.append(f"{i}. {q}")
     lines += [
         "",
-        "Über eine kurze Rückmeldung würden wir uns sehr freuen. Bei Fragen stehen "
-        "wir Ihnen jederzeit gern zur Verfügung.",
+        tr("email.outro", lang),
         "",
-        "Mit freundlichen Grüßen",
-        "Ihr Recruiting-Team",
+        tr("email.signoff", lang),
+        tr("email.team", lang),
     ]
     return to, subject, "\n".join(lines)

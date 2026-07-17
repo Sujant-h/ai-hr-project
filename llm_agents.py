@@ -47,7 +47,9 @@ import os
 import re
 from typing import Optional
 
-from models import EDU_LEVELS, EDU_LABELS, Candidate, MatchResult, Requirement
+from i18n import DEFAULT_LANG, edu_label, lang_name, tr
+from models import EDU_LEVELS, Candidate, MatchResult, Requirement
+from vocabulary import LANGUAGE_VOCAB, SKILL_VOCAB, canonicalize, canonicalize_all
 
 # --- Optional dependencies: degrade gracefully ------------------------------
 
@@ -225,7 +227,7 @@ REQUIREMENTS_SCHEMA = {
                 "properties": {
                     "label": {
                         "type": "string",
-                        "description": "Short human-readable English or German label, e.g. 'Python' or '5+ Years Experience'",
+                        "description": "Short human-readable label in the language named under OUTPUT LANGUAGE, e.g. 'Python' or '5+ years of experience'",
                     },
                     "kind": {
                         "type": "string",
@@ -234,7 +236,7 @@ REQUIREMENTS_SCHEMA = {
                     "value": {
                         "type": "string",
                         "description": (
-                            "skill/language: canonical name (e.g. 'Python', 'Englisch'). "
+                            "skill/language: canonical ENGLISH name, never translated (e.g. 'Python', 'English'). "
                             "experience: number of years as digits (e.g. '5'). "
                             "education: one of kein abschluss|ausbildung|bachelor|master|diplom|mba|phd|promotion"
                         ),
@@ -293,8 +295,8 @@ MATCHING_SCHEMA = {
                     "note": {
                         "type": "string",
                         "description": (
-                            "English (or German) explanation citing WHERE in the CV the evidence was found, "
-                            "e.g. \"Mentioned in the CV under 'Projects'.\""
+                            "Explanation citing WHERE in the CV the evidence was found, written in the "
+                            "language named under OUTPUT LANGUAGE, e.g. \"Mentioned in the CV under 'Projects'.\""
                         ),
                     },
                 },
@@ -308,9 +310,19 @@ MATCHING_SCHEMA = {
 }
 
 
-def _chat_json(system_prompt: str, user_prompt: str, schema_name: str, schema: dict) -> dict:
+def _chat_json(
+    system_prompt: str,
+    user_prompt: str,
+    schema_name: str,
+    schema: dict,
+    lang: str = DEFAULT_LANG,
+) -> dict:
     """One strict structured-output call. temperature=0 keeps extraction
-    reproducible — important for the audit trail."""
+    reproducible — important for the audit trail.
+
+    `lang` only reaches the LLMError messages: they surface to the recruiter as
+    a fallback reason in the audit log.
+    """
     try:
         response = _get_client().chat.completions.create(
             model=DEFAULT_MODEL,
@@ -330,22 +342,46 @@ def _chat_json(system_prompt: str, user_prompt: str, schema_name: str, schema: d
         # json.loads(None) — the audit log then records a readable reason.
         refusal = getattr(msg, "refusal", None)
         if refusal:
-            raise LLMError(f"Modell hat die Extraktion verweigert ({schema_name}): {refusal}")
+            raise LLMError(tr("llm.refusal", lang, schema=schema_name, reason=refusal))
         if msg.content is None:
-            raise LLMError(f"LLM lieferte keinen Inhalt ({schema_name}).")
+            raise LLMError(tr("llm.no_content", lang, schema=schema_name))
         return json.loads(msg.content)
     except LLMError:
         raise
     except Exception as exc:
-        raise LLMError(f"LLM-Aufruf fehlgeschlagen ({schema_name}): {exc}") from exc
+        raise LLMError(tr("llm.call_failed", lang, schema=schema_name, error=exc)) from exc
 
 
 # =============================================================================
 #  SYSTEM PROMPTS  (Role -> Task -> Input -> Rules -> Few-Shot -> Output)
 #  ---------------------------------------------------------------------------
 #  Prompts are written in English (models follow English instructions most
-#  reliably). User-facing output fields should be in English (default) or German.
+#  reliably). The language of the PROSE the model writes back is not baked in:
+#  it is appended per request by _language_directive, because the recruiter can
+#  switch the UI language and the notes they read have to follow.
 # =============================================================================
+
+
+def _language_directive(lang: str) -> str:
+    """The output-language rule, appended to whichever system prompt is in use.
+
+    It comes last so it wins over the language of the few-shot examples above
+    it, which are necessarily written in one specific language.
+
+    Only prose is covered. Canonical values (skills, spoken languages) stay
+    English no matter what: they are compared against `Requirement.value` on a
+    later request that may carry a different `lang`, so a translated canonical
+    would break matching rather than localize it (see rules.SKILL_VOCAB).
+    """
+    return f"""
+
+# OUTPUT LANGUAGE (highest priority — overrides the examples above)
+Write EVERY human-readable prose field ("label", "note") in {lang_name(lang)},
+whatever language the input document is written in.
+Do NOT translate canonical identifiers: technology and skill names keep their
+established English spelling ("Python", "AWS", "Machine Learning"), and the
+"languages" / "value" fields use English language names ("English", "German").
+"""
 
 STELLENPROFIL_SYSTEM_PROMPT = """\
 # ROLE
@@ -370,8 +406,8 @@ An English or German job advertisement as Markdown.
 2. Do NOT rate, weight, rank or score requirements beyond muss/kann.
 3. Ignore all demographic constraints (age, gender, nationality, ...). Legal
    boilerplate like "(m/w/d)" is NOT a requirement.
-4. Use canonical names: "English" or "Englisch", "Python" not "python".
-5. All labels must be written in English by default, or German if the input is exclusively German.
+4. Use canonical names: "Python" not "python", "English" not "Englisch".
+5. See the OUTPUT LANGUAGE section for the language each label must be written in.
 
 # FEW-SHOT EXAMPLE
 Input:
@@ -414,8 +450,8 @@ One CV as Markdown (converted from PDF or pasted as text).
    If a field is not stated: email -> null, years_experience -> null,
    education_level -> "unbekannt".
 3. Do NOT evaluate, rate or summarize the candidate. Extraction only.
-4. skills: professional skills and technologies only, canonical spelling,
-   no duplicates. languages: English/German names ("English", "French").
+4. skills: professional skills and technologies only, canonical English
+   spelling, no duplicates. languages: English names ("English", "French").
 5. years_experience: only if explicitly stated or directly computable from
    explicit employment dates; otherwise null.
 
@@ -434,8 +470,9 @@ Output:
     {"name": "Max Mustermann", "email": "max@example.com",
      "skills": ["Python", "Django", "PostgreSQL", "SQL"],
      "years_experience": 6, "education_level": "bachelor",
-     "languages": ["Deutsch", "Englisch"]}
-    (Note: birth date and marital status were IGNORED — they appear nowhere.)
+     "languages": ["German", "English"]}
+    (Note: birth date and marital status were IGNORED — they appear nowhere.
+     The CV is German, but the language names are canonical English.)
 
 # OUTPUT FORMAT
 Return ONLY JSON matching the provided schema. No prose, no explanations.
@@ -466,8 +503,9 @@ You must return exactly one result per requirement id — no more, no less.
 
 # RULES (strictly enforced)
 1. NO ranking, NO scoring, NO percentages, NO hire/reject recommendation.
-2. EXPLAINABILITY: every "note" must state in English (or German) WHERE the evidence was
-   found (section or wording), so a human can verify it in seconds.
+2. EXPLAINABILITY: every "note" must state WHERE the evidence was found
+   (section or wording), so a human can verify it in seconds. See the
+   OUTPUT LANGUAGE section for which language to write it in.
    Good: "Mentioned in the CV under 'Projects' (data pipeline with Python)."
    Bad:  "Good fit."
 3. Judge ONLY against the CV text. No assumptions, no world knowledge about
@@ -478,18 +516,21 @@ You must return exactly one result per requirement id — no more, no less.
    "teilweise", choose "teilweise" and explain the doubt in the note.
 
 # FEW-SHOT EXAMPLE
+(The notes below are English; write yours in the language named under
+OUTPUT LANGUAGE, which may differ.)
+
 Requirement: {"id": "req_1_skill", "label": "SQL", "kind": "skill", "value": "SQL", "importance": "muss"}
 CV excerpt:  "## Projekte\\nReporting-Dashboard mit PostgreSQL und Power BI"
 Output item: {"requirement_id": "req_1_skill", "status": "erfuellt",
-              "note": "Im Lebenslauf unter 'Projekte' genannt: PostgreSQL (SQL-Datenbank)."}
+              "note": "Named in the CV under 'Projekte': PostgreSQL (an SQL database)."}
 
-Requirement: {"id": "req_2_experience", "label": "5+ Jahre Berufserfahrung", "kind": "experience", "value": 5, "importance": "muss"}
+Requirement: {"id": "req_2_experience", "label": "5+ years of experience", "kind": "experience", "value": 5, "importance": "muss"}
 CV excerpt:  "Berufserfahrung: 3 Jahre Backend-Entwicklung"
 Output item: {"requirement_id": "req_2_experience", "status": "teilweise",
-              "note": "Im Abschnitt 'Berufserfahrung': 3 von 5 geforderten Jahren angegeben."}
+              "note": "Under 'Berufserfahrung': 3 of the 5 required years stated."}
 
 # OUTPUT FORMAT
-Return ONLY JSON matching the provided schema. All notes in English (or German).
+Return ONLY JSON matching the provided schema.
 """
 
 
@@ -497,22 +538,28 @@ Return ONLY JSON matching the provided schema. All notes in English (or German).
 #  STEP 2 — EXTRACTION AGENTS
 # =============================================================================
 
-def stellenprofil_agent_llm(text: str) -> list:
-    """LLM version of the Stellenprofil-Agent: job ad -> list[Requirement]."""
+def stellenprofil_agent_llm(text: str, lang: str = DEFAULT_LANG) -> list:
+    """LLM version of the Stellenprofil-Agent: job ad -> list[Requirement].
+
+    `lang` controls the language of the requirement labels, not what counts as
+    a requirement.
+    """
     markdown = clean_markdown(text)
     data = _chat_json(
-        STELLENPROFIL_SYSTEM_PROMPT,
+        STELLENPROFIL_SYSTEM_PROMPT + _language_directive(lang),
         (
-            "# STELLENANZEIGE (Markdown)\n"
+            "# JOB ADVERTISEMENT (Markdown)\n"
             f"{_UNTRUSTED_DOC_NOTICE}\n\n"
             f"{fence_document(markdown)}\n\n"
             "# TASK\n"
             "Extract the measurable requirements from the advertisement above, "
             "following only the rules from the system prompt: extract what the "
-            "text states, never invent, muss/kann only, English or German labels."
+            "text states, never invent, muss/kann only, and write the labels in "
+            f"{lang_name(lang)}."
         ),
         "requirements_extraction",
         REQUIREMENTS_SCHEMA,
+        lang,
     )
 
     requirements: list = []
@@ -522,6 +569,17 @@ def stellenprofil_agent_llm(text: str) -> list:
         value: object = str(raw.get("value", "")).strip()
         if not label:
             continue
+        # The prompt asks for a canonical English `value`, and the model obeys
+        # for languages but not reliably for skills: a German ad yields
+        # "Projektmanagement" however firmly it is told otherwise. `value` is
+        # compared against Candidate.skills — by the rule-based agent on the
+        # fallback path, and across requests after a language switch — so a
+        # translated one silently reports a skill the CV lists as missing.
+        # Normalising here is what actually holds the invariant.
+        if kind == "skill":
+            value = canonicalize(value, SKILL_VOCAB)
+        elif kind == "language":
+            value = canonicalize(value, LANGUAGE_VOCAB)
         # Defensive coercion: schema delivers strings, dataclass wants ints
         # for experience years and education levels.
         if kind == "experience":
@@ -541,7 +599,10 @@ def stellenprofil_agent_llm(text: str) -> list:
                 continue
             else:
                 value = mapped_val
-                label = f"Bildungsabschluss: {EDU_LABELS[int(value)]}"
+                # Rebuilt from our own catalogue rather than trusting the
+                # model's label: the level is what matching compares, so the
+                # label has to name that exact level.
+                label = tr("req.education", lang, label=edu_label(int(value), lang))
         importance = raw.get("importance", "muss")
         requirements.append(
             Requirement(
@@ -555,7 +616,7 @@ def stellenprofil_agent_llm(text: str) -> list:
     return requirements
 
 
-def cv_agent_llm(name: str, source: str, text: str, idx: int) -> Candidate:
+def cv_agent_llm(name: str, source: str, text: str, idx: int, lang: str = DEFAULT_LANG) -> Candidate:
     """LLM version of the CV-Agent: CV Markdown -> Candidate.
 
     `text` should already be Markdown (see pdf_to_markdown). Demographic
@@ -564,9 +625,9 @@ def cv_agent_llm(name: str, source: str, text: str, idx: int) -> Candidate:
     """
     markdown = redact_demographics(clean_markdown(text))
     data = _chat_json(
-        CV_SYSTEM_PROMPT,
+        CV_SYSTEM_PROMPT + _language_directive(lang),
         (
-            "# LEBENSLAUF (Markdown)\n"
+            "# CV (Markdown)\n"
             f"{_UNTRUSTED_DOC_NOTICE}\n\n"
             f"{fence_document(markdown)}\n\n"
             "# TASK\n"
@@ -576,6 +637,7 @@ def cv_agent_llm(name: str, source: str, text: str, idx: int) -> Candidate:
         ),
         "cv_extraction",
         CANDIDATE_SCHEMA,
+        lang,
     )
 
     edu_key = str(data.get("education_level", "unbekannt")).lower()
@@ -588,11 +650,13 @@ def cv_agent_llm(name: str, source: str, text: str, idx: int) -> Candidate:
         name=display_name,
         source=source,
         raw_text=markdown,  # store the REDACTED markdown, not the original
-        skills=[str(s) for s in data.get("skills", [])],
+        # Canonicalized for the same reason as Requirement.value: these are the
+        # other side of that comparison, so both sides must speak one language.
+        skills=canonicalize_all(data.get("skills", []), SKILL_VOCAB),
         years=int(years) if isinstance(years, int) and 0 <= years <= 60 else None,
         education=edu_level,
-        education_label=EDU_LABELS.get(edu_level, "unbekannt") if edu_level > 0 else "unbekannt",
-        languages=[str(l) for l in data.get("languages", [])],
+        education_label=edu_label(edu_level, lang) if edu_level > 0 else tr("edu.unknown", lang),
+        languages=canonicalize_all(data.get("languages", []), LANGUAGE_VOCAB),
         email=data.get("email") or None,
     )
 
@@ -601,7 +665,7 @@ def cv_agent_llm(name: str, source: str, text: str, idx: int) -> Candidate:
 #  STEP 3 — SEMANTIC MATCHING (RAG-style context assembly)
 # =============================================================================
 
-def _build_matching_context(candidate: Candidate, requirements: list) -> str:
+def _build_matching_context(candidate: Candidate, requirements: list, lang: str = DEFAULT_LANG) -> str:
     """Assemble the retrieval context for the matching call:
     requirements as JSON + the candidate's CV Markdown + task framing.
     This is the 'R' in RAG: we retrieve exactly the two documents the model
@@ -630,11 +694,11 @@ def _build_matching_context(candidate: Candidate, requirements: list) -> str:
         "Compare the CV against EVERY requirement id listed above and return "
         "one result per id. Follow only the rules from the system prompt: no "
         "ranking, no scoring, no recommendation; base each status on evidence "
-        "and cite in the English (or German) note where in the CV that evidence appears."
+        f"and cite, in {lang_name(lang)}, where in the CV that evidence appears."
     )
 
 
-def matching_agent_llm(candidate: Candidate, requirements: list) -> list:
+def matching_agent_llm(candidate: Candidate, requirements: list, lang: str = DEFAULT_LANG) -> list:
     """LLM version of the Matching-Agent: semantic comparison, no ranking.
 
     Label, kind and importance are taken from OUR Requirement objects (the
@@ -645,10 +709,11 @@ def matching_agent_llm(candidate: Candidate, requirements: list) -> list:
         return []
 
     data = _chat_json(
-        MATCHING_SYSTEM_PROMPT,
-        _build_matching_context(candidate, requirements),
+        MATCHING_SYSTEM_PROMPT + _language_directive(lang),
+        _build_matching_context(candidate, requirements, lang),
         "requirement_matching",
         MATCHING_SCHEMA,
+        lang,
     )
 
     by_id = {
@@ -661,9 +726,9 @@ def matching_agent_llm(candidate: Candidate, requirements: list) -> list:
         item = by_id.get(req.id)
         if item and item.get("status") in ("erfuellt", "teilweise", "offen", "nicht_erfuellt"):
             status = item["status"]
-            note = str(item.get("note", "")).strip() or "Keine Begruendung geliefert."
+            note = str(item.get("note", "")).strip() or tr("note.llm.no_reason", lang)
         else:
-            status, note = "offen", "Vom Matching-Agent nicht beantwortet — bitte manuell pruefen."
+            status, note = "offen", tr("note.llm.unanswered", lang)
         results.append(
             MatchResult(
                 requirement_id=req.id,
@@ -672,6 +737,7 @@ def matching_agent_llm(candidate: Candidate, requirements: list) -> list:
                 importance=req.importance,
                 status=status,
                 note=note,
+                value=req.value,
             )
         )
     return results

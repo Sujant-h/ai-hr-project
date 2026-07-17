@@ -20,30 +20,30 @@ describe('JobProfileTab', () => {
 
     expect(screen.getByText('Python')).toBeInTheDocument();
     expect(screen.getByText('3 Jahre')).toBeInTheDocument();
-    expect(screen.getByText('Muss')).toBeInTheDocument();
-    expect(screen.getByText('Kann')).toBeInTheDocument();
+    expect(screen.getByText('Must')).toBeInTheDocument();
+    expect(screen.getByText('Nice to have')).toBeInTheDocument();
   });
 
   it('disables analysis until there is text to analyse', async () => {
     render(<JobProfileTab />);
-    expect(screen.getByRole('button', { name: /Profil analysieren/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Analyze Profile/ })).toBeDisabled();
 
     await userEvent.type(screen.getByRole('textbox'), 'Wir suchen Python.');
-    expect(screen.getByRole('button', { name: /Profil analysieren/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Analyze Profile/ })).toBeEnabled();
   });
 
   it('shows a pending state while the agent works', async () => {
     let release!: () => void;
     vi.spyOn(apiClient, 'parseJobProfile').mockReturnValue(
       new Promise((res) => {
-        release = () => res({ requirements: [], audit: [], backend: 'regelbasiert' });
+        release = () => res({ requirements: [], audit: [], backend: 'rule-based' });
       }),
     );
     useSessionStore.getState().setJobText('Wir suchen Python.');
     render(<JobProfileTab />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Profil analysieren/ }));
-    expect(screen.getByRole('button', { name: /Analysiere/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /Analyze Profile/ }));
+    expect(screen.getByRole('button', { name: /Analyzing/ })).toBeDisabled();
     release();
   });
 });
