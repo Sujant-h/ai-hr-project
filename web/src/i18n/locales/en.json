@@ -6,14 +6,8 @@
   },
   "errors": {
     "rateLimited": "Too many requests. Please wait a moment and try again.",
-    "unauthorized": "Invalid or missing access code (password).",
     "unknown": "Unknown error.",
     "dismiss": "Dismiss error message"
-  },
-  "access": {
-    "verifying": "Checking access...",
-    "deniedTitle": "Access Denied",
-    "deniedDesc": "Please use the QR code or the dedicated link from the presentation to access the app."
   },
   "status": {
     "erfuellt": "Met",

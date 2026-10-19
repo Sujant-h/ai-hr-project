@@ -10,7 +10,7 @@ This module must never import Streamlit.
 
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends, Header
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 import llm_agents
@@ -68,12 +68,6 @@ LIMIT_JOB_PROFILE = os.getenv("LIMIT_JOB_PROFILE", "3/day")
 LIMIT_CV = os.getenv("LIMIT_CV", "15/day")
 LIMIT_ANALYSIS = os.getenv("LIMIT_ANALYSIS", "3/day")
 
-ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD")
-
-def verify_password(x_access_token: Optional[str] = Header(None)):
-    if ACCESS_PASSWORD and x_access_token != ACCESS_PASSWORD:
-        raise HTTPException(status_code=401, detail="Invalid or missing access token")
-
 
 class BackendOut(BaseModel):
     label: str
@@ -99,12 +93,6 @@ def get_backend(lang: Lang = DEFAULT_LANG) -> BackendOut:
     return BackendOut(label=backend_label(lang), is_llm=is_llm_active())
 
 
-@app.get("/api/verify", dependencies=[Depends(verify_password)])
-def get_verify():
-    """Verify that the access password is correct."""
-    return {"status": "ok"}
-
-
 @app.get("/api/demo", response_model=DemoOut)
 def get_demo(lang: Lang = DEFAULT_LANG) -> DemoOut:
     """Seed data for the "Load demo data" button, in the recruiter's language."""
@@ -127,7 +115,7 @@ class JobProfileOut(BaseModel):
     backend: str
 
 
-@app.post("/api/job-profile", response_model=JobProfileOut, dependencies=[Depends(verify_password)])
+@app.post("/api/job-profile", response_model=JobProfileOut)
 @limiter.limit(LIMIT_JOB_PROFILE)
 def post_job_profile(request: Request, payload: JobProfileIn) -> JobProfileOut:
     """① Stellenprofil-Agent: job ad -> measurable requirements."""
@@ -173,7 +161,7 @@ def _upload_to_markdown(upload: UploadFile, data: bytes) -> str:
         return ""
 
 
-@app.post("/api/cv", response_model=CvOut, dependencies=[Depends(verify_password)])
+@app.post("/api/cv", response_model=CvOut)
 @limiter.limit(LIMIT_CV)
 async def post_cv(
     request: Request,
@@ -229,7 +217,7 @@ class AnalysisOut(BaseModel):
     audit: list[AuditEntryOut]
 
 
-@app.post("/api/analysis", response_model=AnalysisOut, dependencies=[Depends(verify_password)])
+@app.post("/api/analysis", response_model=AnalysisOut)
 @limiter.limit(LIMIT_ANALYSIS)
 def post_analysis(request: Request, payload: AnalysisIn) -> AnalysisOut:
     """③④⑤ Matching + gaps + follow-up questions for every candidate sent.
