@@ -6,14 +6,8 @@
   },
   "errors": {
     "rateLimited": "Zu viele Anfragen. Bitte einen Moment warten und erneut versuchen.",
-    "unauthorized": "Ungültiger oder fehlender Zugangs-Code (Passwort).",
     "unknown": "Unbekannter Fehler.",
     "dismiss": "Fehlermeldung schließen"
-  },
-  "access": {
-    "verifying": "Zugang wird geprüft...",
-    "deniedTitle": "Zugriff verweigert",
-    "deniedDesc": "Bitte nutzen Sie den QR-Code oder den speziellen Link aus der Präsentation, um auf die App zuzugreifen."
   },
   "status": {
     "erfuellt": "Erfüllt",

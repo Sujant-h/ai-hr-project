@@ -43,14 +43,10 @@ async function toApiError(res: Response): Promise<ApiError> {
     // A non-JSON error body (a proxy 502, say) still has to become an ApiError.
   }
 
-  // These two are raised by middleware that never sees our `lang`, so their
-  // wording is replaced here rather than translated on the server: slowapi
-  // writes its own English message, and the 401 comes from the auth dependency
-  // before any payload is parsed.
+  // Raised by slowapi middleware that never sees our `lang`, so its English
+  // wording is replaced here rather than translated on the server.
   if (res.status === 429) {
     message = i18n.t('errors.rateLimited');
-  } else if (res.status === 401) {
-    message = i18n.t('errors.unauthorized');
   }
 
   return new ApiError(res.status, message);
@@ -66,14 +62,7 @@ function getClientId(): string {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'X-Client-ID': getClientId(),
-  };
-  const pwd = localStorage.getItem('pwd');
-  if (pwd) {
-    headers['X-Access-Token'] = pwd;
-  }
-  return headers;
+  return { 'X-Client-ID': getClientId() };
 }
 
 /** Append the active language to a GET endpoint's query string. */
