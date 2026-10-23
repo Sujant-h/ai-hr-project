@@ -4,6 +4,12 @@ import type { CandidateAnalysisOut } from '../api/client';
 import i18n from '../i18n/config';
 import { useSessionStore } from '../store/session';
 import { AnalysisCache } from '../lib/analysisCache';
+import { track } from '../lib/analytics';
+
+// Only the step and the HTTP status (429 = daily limit reached), never the message.
+function trackError(step: string, e: unknown): void {
+  track('api-error', { step, status: e instanceof ApiError ? e.status : 0 });
+}
 
 function messageOf(e: unknown): string {
   if (e instanceof ApiError) return e.message;
@@ -42,7 +48,9 @@ export function useScreening() {
         useSessionStore.getState().addCandidate(candidate);
         useSessionStore.getState().appendAudit(audit);
       }
+      track('demo-load');
     } catch (e) {
+      trackError('demo', e);
       useSessionStore.getState().setError(messageOf(e));
     }
   }, []);
@@ -55,7 +63,9 @@ export function useScreening() {
       const { requirements, audit } = await apiClient.parseJobProfile(store.jobText);
       useSessionStore.getState().setRequirements(requirements);
       useSessionStore.getState().appendAudit(audit);
+      track('job-parse', { requirements: requirements.length });
     } catch (e) {
+      trackError('job', e);
       useSessionStore.getState().setError(messageOf(e));
     }
   }, []);
@@ -73,10 +83,14 @@ export function useScreening() {
         useSessionStore.getState().addCandidate(candidate);
         useSessionStore.getState().appendAudit(audit);
       } catch (e) {
+        trackError('cv', e);
         failures.push(`${file.name}: ${messageOf(e)}`);
       }
     }
 
+    if (files.length > failures.length) {
+      track('cv-upload', { files: files.length - failures.length });
+    }
     if (failures.length) useSessionStore.getState().setError(failures.join(' · '));
   }, []);
 
@@ -117,7 +131,9 @@ export function useScreening() {
         .filter((a): a is CandidateAnalysisOut => Boolean(a));
       useSessionStore.getState().setAnalyses(ordered);
       useSessionStore.getState().appendAudit(result.audit);
+      track('analysis-run', { candidates: candidates.length, cached: hits.length });
     } catch (e) {
+      trackError('analysis', e);
       useSessionStore.getState().setError(messageOf(e));
     } finally {
       useSessionStore.getState().setIsAnalyzing(false);
