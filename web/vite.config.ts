@@ -39,9 +39,38 @@ function inlineCss(): Plugin {
   }
 }
 
+// Self-hosted umami (vps-infra): nginx serves the tracker and its collect
+// endpoint first-party under /u/, so no CSP exception is needed. Build only:
+// the dev server has no /u/ route. data-domains keeps local previews out of
+// the stats; search and hash are never sent, nor is anything the user types.
+function umamiTracker(): Plugin {
+  return {
+    name: 'umami-tracker',
+    apply: 'build',
+    transformIndexHtml() {
+      return [
+        {
+          tag: 'script',
+          attrs: {
+            defer: true,
+            src: '/u/s.js',
+            'data-website-id': '16b245e8-b44e-46bd-8509-a6842c164bea',
+            'data-host-url': '/u',
+            'data-domains': 'hr-ai.suthaharan.de',
+            'data-do-not-track': 'true',
+            'data-exclude-search': 'true',
+            'data-exclude-hash': 'true',
+          },
+          injectTo: 'head',
+        },
+      ]
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), inlineCss()],
+  plugins: [react(), inlineCss(), umamiTracker()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
