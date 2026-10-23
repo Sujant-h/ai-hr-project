@@ -1,25 +1,17 @@
-version: '3.8'
-
+# Lokale Entwicklung/Test: baut beide Images aus dem Quellcode.
+# Produktion läuft mit fertigen Images aus GHCR, gesteuert über das Repo vps-infra.
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: hr_api
+    build: .
     restart: unless-stopped
-    env_file:
-      - .env
-    # Optional: map port to host if you want to access API directly
-    # ports:
-    #   - "8000:8000"
+    env_file: .env
 
   web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    container_name: hr_web
+    build: ./web
     restart: unless-stopped
+    # Nur auf Loopback veröffentlichen, nie 0.0.0.0 (Docker umgeht sonst jede Host-Firewall)
     ports:
-      - "80:80"
+      - "127.0.0.1:8080:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy

@@ -16,6 +16,12 @@ def client(monkeypatch):
     return TestClient(app)
 
 
+def test_health_endpoint_is_ok(client):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_backend_endpoint_reports_the_rule_based_backend(client):
     response = client.get("/api/backend")
     assert response.status_code == 200

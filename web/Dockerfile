@@ -1,23 +1,22 @@
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1
+# Web-Image: React-SPA, ausgeliefert von nginx ohne root (Port 8080).
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci
+# --legacy-peer-deps: eine Abhängigkeit deklariert ein zu enges Peer-Dependency-Range
+RUN npm ci --legacy-peer-deps
 
-# Copy source and build
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
-# Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://127.0.0.1:8080/ || exit 1
