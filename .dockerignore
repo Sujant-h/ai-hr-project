@@ -1,9 +1,17 @@
-# Ignore git and python virtual environments
+# Build-Kontext klein halten; das Dockerfile kopiert ohnehin nur den Laufzeit-Code
 .git
+.github
+.claude
 .venv
+.pytest_cache
 __pycache__
 *.pyc
-
-# Ignore frontend build outputs and node_modules
-web/node_modules
-web/dist
+.env
+.env.*
+docs
+tests
+web
+static
+scripts
+scratch_test.py
+openapi.json

@@ -1,5 +1,10 @@
 # VPS Deployment Guide
 
+> **Production deployment has moved.** hr-ai.suthaharan.de runs from prebuilt images
+> (`ghcr.io/sujant-h/ai-hr-project-{api,web}`, built by `.github/workflows/ci.yml`) and is
+> configured by the private infrastructure repo `vps-infra` (Ansible). Nothing is built or
+> cloned on the server anymore. The manual steps below are kept for reference only.
+
 This guide explains how to deploy the AI HR Project (FastAPI backend + Vite/React frontend) to a Linux Virtual Private Server (VPS).
 
 ## Prerequisites

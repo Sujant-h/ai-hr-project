@@ -87,6 +87,12 @@ class DemoOut(BaseModel):
     cvs: list[DemoCvOut]
 
 
+@app.get("/api/health")
+def get_health() -> dict[str, str]:
+    """Liveness probe for the container healthcheck. Touches nothing else on purpose."""
+    return {"status": "ok"}
+
+
 @app.get("/api/backend", response_model=BackendOut)
 def get_backend(lang: Lang = DEFAULT_LANG) -> BackendOut:
     """Which backend is active, for the header badge."""
